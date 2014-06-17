@@ -44,11 +44,6 @@ typedef struct {
   token_type_t  type;
 } token_t;
 
-// Constants -----
-const char operators[] = {
-  '(', ')', '=', '+', '-', '*', '/'
-};
-
 // Variables -----
 // Lexer buffer
 uint32_t linebuf_idx = 0;
@@ -67,8 +62,13 @@ const char *keywords[] = {
   ""
 };
 
+const char *operators[] = {
+  "(", ")", "=", "+", "-", "*", "/"
+};
+
+
 // Function Prototypes -----
-int parseline(FILE *f);
+int lexline(FILE *f);
 int interpret(void);
 int iseof(char c);
 int isendofline(char c);
@@ -77,6 +77,7 @@ int isdoublequote(char c);
 int isoperator(char c);
 int isalpha(char c);
 int isdigit(char c);
+int isbindigit(char c);
 int ishexdigit(char c);
 
 // Start of main -----
@@ -100,7 +101,7 @@ int main(int argc, char *argv[])
   // Let user know we are running the file now.
   printf("Running BASIC script %s\r\n", argv[1]);
 
-  while (parseline(fp) == 0);
+  while (lexline(fp) == 0);
 
   // Done! Close file.
   fclose(fp);
@@ -109,7 +110,7 @@ int main(int argc, char *argv[])
 }
 
 // Function Definitions -----
-int parseline(FILE *f)
+int lexline(FILE *f)
 {
   char ch;
 
@@ -169,12 +170,37 @@ int interpret(void)
       linebuf_idx++;
     } else if (isdigit(ch)) {
       // Check number format (dec, hex, etc.)
-      ch = linebuf[linebuf_idx++];
+      idx1 = linebuf_idx;
+      ch = linebuf[++linebuf_idx];
       if (ch == 'x' || ch == 'X') {
-        // TODO
+        // Hex
+        do {
+          ch = linebuf[++linebuf_idx];
+        } while (ishexdigit(ch));
+        if (!iswhitespace(ch)) {
+          puts ("Error: Invalid NUMBER");
+          return rFAILURE;
+        }
+      } else if (ch == 'b' || ch == 'B') {
+        // Binary
+        do {
+          ch = linebuf[++linebuf_idx];
+        } while (isbindigit(ch));
+        if (!iswhitespace(ch)) {
+          puts ("Error: Invalid NUMBER");
+          return rFAILURE;
+        }
       } else {
-        // TODO
-      }
+        while (isdigit(ch)) {
+          ch = linebuf[++linebuf_idx];
+        }
+      } 
+      idx2 = linebuf_idx;
+
+      // Save token name and type as NUMBER
+      memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
+      tokens[tokp].type = NUMBER;
+      tokens[tokp++].name[idx2 - idx1] = '\0';
     } else if (isdoublequote(ch)) {
       // Check for string literals
       idx1 = linebuf_idx + 1;
@@ -189,29 +215,27 @@ int interpret(void)
       idx2 = linebuf_idx++;
 
       // Save token name and type as STRING
-#if (DEBUG == 1)
-      printf("idx1: %d, idx2: %d\r\n", idx1, idx2);
-#endif
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = STRING;
       tokens[tokp++].name[idx2 - idx1] = '\0';
     } else if (isoperator(ch)) {
-      strcpy(tokens[tokp++].name, &ch);
+      // Operators
+      strcpy(tokens[tokp].name, &ch);
+      tokens[tokp].type = OPERATOR;
+      tokp++;
       linebuf_idx++;
     } else if (isalpha(ch)) {
+      // Identifiers
       idx1 = linebuf_idx;
-      while (!iswhitespace(ch)) {
+      while (isalpha(ch) || isdigit(ch)) {
         ch = linebuf[++linebuf_idx];
-        if (isendofline(ch)) {
+        if (isendofline(ch) || iswhitespace(ch)) {
           break;
         }
       }
-      idx2 = linebuf_idx++;
+      idx2 = linebuf_idx;
 
       // Save token name and type as IDENTIFIER
-#if (DEBUG == 1)
-      printf("idx1: %d, idx2: %d\r\n", idx1, idx2);
-#endif
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = IDENTIFIER;
       tokens[tokp++].name[idx2 - idx1] = '\0';
@@ -245,7 +269,7 @@ int isendofline(char c)
 
 int iswhitespace(char c)
 {
-  if (c == ' ' || c == '\t') {
+  if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
     return 1;
   }
 
@@ -260,8 +284,8 @@ int isdoublequote(char c)
 int isoperator(char c)
 {
   int i;
-  for (i = 0; i < sizeof(operators); i++) {
-    if (c == operators[i]) {
+  for (i = 0; operators[i]; i++) {
+    if (c == operators[i][0]) {
       return 1;
     }
   }
@@ -285,6 +309,15 @@ int isalpha(char c)
 int isdigit(char c)
 {
   if ('0' <= c && c <= '9') {
+    return 1;
+  }
+
+  return 0;
+}
+
+int isbindigit(char c)
+{
+  if (c == '0' || c == '1') {
     return 1;
   }
 
