@@ -188,11 +188,12 @@ int interpret(void)
       } while (linebuf[linebuf_idx] != '"');
       idx2 = linebuf_idx++;
 
-      // Save token name
+      // Save token name and type as STRING
 #if (DEBUG == 1)
       printf("idx1: %d, idx2: %d\r\n", idx1, idx2);
 #endif
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
+      tokens[tokp].type = STRING;
       tokens[tokp++].name[idx2 - idx1] = '\0';
     } else if (isoperator(ch)) {
       strcpy(tokens[tokp++].name, &ch);
@@ -207,11 +208,12 @@ int interpret(void)
       }
       idx2 = linebuf_idx++;
 
-      // Save token name
+      // Save token name and type as IDENTIFIER
 #if (DEBUG == 1)
       printf("idx1: %d, idx2: %d\r\n", idx1, idx2);
 #endif
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
+      tokens[tokp].type = IDENTIFIER;
       tokens[tokp++].name[idx2 - idx1] = '\0';
     } else if (iseof(ch)) {
       return rSUCCESS;
@@ -224,7 +226,7 @@ int interpret(void)
 #if (DEBUG == 1)
   int i;
   for (i = 0; i < tokp; i++) {
-    printf("Token %d: %s\r\n", i, tokens[i].name);
+    printf("Token %d: %s, type: %d\r\n", i, tokens[i].name, (int)tokens[i].type);
   }
 #endif
 
