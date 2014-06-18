@@ -55,6 +55,8 @@ uint32_t tokp = 0;
 uint32_t stack[STACK_SIZE], sp = 0;
 // Variables
 var_t vars[MAX_VAR_COUNT];
+// Line and column trackers
+uint32_t line_count = 0, col_count = 0;
 
 // Constants -----
 const char *keywords[] = {
@@ -62,8 +64,12 @@ const char *keywords[] = {
   ""
 };
 
-const char *operators[] = {
-  "(", ")", "=", "+", "-", "*", "/"
+const char *single_char_operators[] = {
+  "(", ")", "=", "+", "-", "*", "/", ":"
+};
+
+const char *double_char_operators[] = {
+  "=="
 };
 
 
@@ -75,10 +81,10 @@ int isendofline(char c);
 int iswhitespace(char c);
 int isdoublequote(char c);
 int isoperator(char c);
-int isalpha(char c);
-int isdigit(char c);
-int isbindigit(char c);
-int ishexdigit(char c);
+int lexisalpha(char c);
+int lexisdigit(char c);
+int lexisbindigit(char c);
+int lexishexdigit(char c);
 
 // Start of main -----
 int main(int argc, char *argv[])
@@ -145,6 +151,9 @@ int lexline(FILE *f)
   linebuf_idx = 0;
   memset(linebuf, 0, LINEBUF_LEN);
 
+  // Update the line count
+  line_count++;
+
   // Return
   if (ch == EOF) {
     return rEOF;
@@ -168,7 +177,7 @@ int interpret(void)
     if (iswhitespace(ch)) {
       // Ignore white spaces
       linebuf_idx++;
-    } else if (isdigit(ch)) {
+    } else if (lexisdigit(ch)) {
       // Check number format (dec, hex, etc.)
       idx1 = linebuf_idx;
       ch = linebuf[++linebuf_idx];
@@ -176,22 +185,14 @@ int interpret(void)
         // Hex
         do {
           ch = linebuf[++linebuf_idx];
-        } while (ishexdigit(ch));
-        if (!iswhitespace(ch)) {
-          puts ("Error: Invalid NUMBER");
-          return rFAILURE;
-        }
+        } while (lexishexdigit(ch));
       } else if (ch == 'b' || ch == 'B') {
         // Binary
         do {
           ch = linebuf[++linebuf_idx];
-        } while (isbindigit(ch));
-        if (!iswhitespace(ch)) {
-          puts ("Error: Invalid NUMBER");
-          return rFAILURE;
-        }
+        } while (lexisbindigit(ch));
       } else {
-        while (isdigit(ch)) {
+        while (lexisdigit(ch)) {
           ch = linebuf[++linebuf_idx];
         }
       } 
@@ -220,14 +221,18 @@ int interpret(void)
       tokens[tokp++].name[idx2 - idx1] = '\0';
     } else if (isoperator(ch)) {
       // Operators
-      strcpy(tokens[tokp].name, &ch);
+      idx1 = linebuf_idx;
+      do {
+        ch = linebuf[++linebuf_idx];
+      } while (isoperator(ch));
+      idx2 = linebuf_idx;
+      memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = OPERATOR;
-      tokp++;
-      linebuf_idx++;
-    } else if (isalpha(ch)) {
+      tokens[tokp++].name[idx2 - idx1] = '\0';
+    } else if (lexisalpha(ch)) {
       // Identifiers
       idx1 = linebuf_idx;
-      while (isalpha(ch) || isdigit(ch)) {
+      while (lexisalpha(ch) || lexisdigit(ch)) {
         ch = linebuf[++linebuf_idx];
         if (isendofline(ch) || iswhitespace(ch)) {
           break;
@@ -248,6 +253,7 @@ int interpret(void)
   }
 
 #if (DEBUG == 1)
+  printf("Line number: %d\r\n", line_count);
   int i;
   for (i = 0; i < tokp; i++) {
     printf("Token %d: %s, type: %d\r\n", i, tokens[i].name, (int)tokens[i].type);
@@ -284,8 +290,8 @@ int isdoublequote(char c)
 int isoperator(char c)
 {
   int i;
-  for (i = 0; operators[i]; i++) {
-    if (c == operators[i][0]) {
+  for (i = 0; single_char_operators[i]; i++) {
+    if (c == single_char_operators[i][0]) {
       return 1;
     }
   }
@@ -293,7 +299,7 @@ int isoperator(char c)
   return 0;
 }
 
-int isalpha(char c)
+int lexisalpha(char c)
 {
   if ('A' <= c && c <= 'Z') {
     return 1;
@@ -306,7 +312,7 @@ int isalpha(char c)
   return 0;
 }
 
-int isdigit(char c)
+int lexisdigit(char c)
 {
   if ('0' <= c && c <= '9') {
     return 1;
@@ -315,7 +321,7 @@ int isdigit(char c)
   return 0;
 }
 
-int isbindigit(char c)
+int lexisbindigit(char c)
 {
   if (c == '0' || c == '1') {
     return 1;
@@ -324,9 +330,9 @@ int isbindigit(char c)
   return 0;
 }
 
-int ishexdigit(char c)
+int lexishexdigit(char c)
 {
-  if (isdigit(c) || ('A' <= c && c <= 'F')
+  if (lexisdigit(c) || ('A' <= c && c <= 'F')
       || ('a' <= c && c <= 'f')) {
     return 1;
   }
