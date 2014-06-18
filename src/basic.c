@@ -65,11 +65,12 @@ const char *keywords[] = {
 };
 
 const char *single_char_operators[] = {
-  "(", ")", "=", "+", "-", "*", "/", ":"
+  "(", ")", "=", "+", "-", "*", "/", ":",
+  "&", "|"
 };
 
 const char *double_char_operators[] = {
-  "=="
+  "==", "&&", "||"
 };
 
 
@@ -79,12 +80,17 @@ int interpret(void);
 int iseof(char c);
 int isendofline(char c);
 int iswhitespace(char c);
+int isinlinecomment(char c);
 int isdoublequote(char c);
-int isoperator(char c);
+int lexisoperator(char c);
 int lexisalpha(char c);
 int lexisdigit(char c);
 int lexisbindigit(char c);
 int lexishexdigit(char c);
+
+#if DEBUG >= 1
+void debug_print_type(token_type_t type);
+#endif
 
 // Start of main -----
 int main(int argc, char *argv[])
@@ -111,6 +117,7 @@ int main(int argc, char *argv[])
 
   // Done! Close file.
   fclose(fp);
+  puts("");
   puts("BASIC test program exited successfully.");
   return EXIT_SUCCESS;
 }
@@ -138,7 +145,7 @@ int lexline(FILE *f)
 
 #if (DEBUG == 1)
   // Debug
-  printf("%s", linebuf);
+  printf("Line #%d: %s", line_count, linebuf);
 #endif
 
   // Interpret the line
@@ -177,6 +184,12 @@ int interpret(void)
     if (iswhitespace(ch)) {
       // Ignore white spaces
       linebuf_idx++;
+    } else if (isinlinecomment(ch)) {
+      // Ignore comments
+#if DEBUG >= 1
+      printf("Comment: %s\r\n", linebuf + linebuf_idx + 1);
+#endif
+      break;
     } else if (lexisdigit(ch)) {
       // Check number format (dec, hex, etc.)
       idx1 = linebuf_idx;
@@ -219,12 +232,12 @@ int interpret(void)
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = STRING;
       tokens[tokp++].name[idx2 - idx1] = '\0';
-    } else if (isoperator(ch)) {
+    } else if (lexisoperator(ch)) {
       // Operators
       idx1 = linebuf_idx;
       do {
         ch = linebuf[++linebuf_idx];
-      } while (isoperator(ch));
+      } while (lexisoperator(ch));
       idx2 = linebuf_idx;
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = OPERATOR;
@@ -253,11 +266,13 @@ int interpret(void)
   }
 
 #if (DEBUG == 1)
-  printf("Line number: %d\r\n", line_count);
   int i;
   for (i = 0; i < tokp; i++) {
-    printf("Token %d: %s, type: %d\r\n", i, tokens[i].name, (int)tokens[i].type);
+    printf("Token %d: %s, type:", i, tokens[i].name);
+    debug_print_type(tokens[i].type);
+    puts("");
   }
+  puts("");
 #endif
 
   return rSUCCESS;
@@ -282,12 +297,21 @@ int iswhitespace(char c)
   return 0;
 }
 
+int isinlinecomment(char c)
+{
+  if (c == '#') {
+    return 1;
+  }
+
+  return 0;
+}
+
 int isdoublequote(char c)
 {
   return (c == '"' ? 1 : 0);
 }
 
-int isoperator(char c)
+int lexisoperator(char c)
 {
   int i;
   for (i = 0; single_char_operators[i]; i++) {
@@ -340,3 +364,30 @@ int lexishexdigit(char c)
   return 0;
 }
 
+#if DEBUG >= 1
+void debug_print_type(token_type_t type)
+{
+  switch (type) {
+    case NUMBER:
+      printf("Number");
+      break;
+    case STRING:
+      printf("String");
+      break;
+    case OPERATOR:
+      printf("Operator");
+      break;
+    case IDENTIFIER:
+      printf("Identifier");
+      break;
+    case VARIABLE:
+      printf("Variable");
+      break;
+    case KEYWORD:
+      printf("Keyword");
+      break;
+    default:
+      break;
+  }
+}
+#endif
