@@ -61,7 +61,11 @@ uint32_t line_count = 0, col_count = 0;
 // Constants -----
 const char *keywords[] = {
   "PRINT",
-  ""
+  "LET",
+  "IF",
+  "THEN",
+  "ELSE",
+  "END"
 };
 
 const char *single_char_operators[] = {
@@ -75,21 +79,21 @@ const char *double_char_operators[] = {
 
 
 // Function Prototypes -----
-int lexline(FILE *f);
-int interpret(void);
-int iseof(char c);
-int lexisendofline(char c);
-int lexiswhitespace(char c);
-int lexisIinlinecomment(char c);
-int lexisdoublequote(char c);
-int lexisoperator(char c);
-int lexisalpha(char c);
-int lexisnumber(int *idx1, int *idx2);
-int lexisdigit(char c);
-int lexisbindigit(char c);
-int lexishexdigit(char c);
-int lexiskeyword(char *id, uint32_t len);
-int lexisvariable(char *id, uint32_t len);
+int LexLine(FILE *f);
+int Interpret(void);
+int LexIsEOF(char c);
+int LexIsEndOfLine(char c);
+int LexIsWhiteSpace(char c);
+int LexIsInlineComment(char c);
+int LexIsDoubleQuote(char c);
+int LexIsOperator(char c);
+int LexIsAlpha(char c);
+int LexIsNumber(int *idx1, int *idx2);
+int LexIsDigit(char c);
+int LexIsBinDigit(char c);
+int LexIsHexDigit(char c);
+int LexIsKeyword(char *id);
+int LexIsVariable(char *id);
 
 #if DEBUG >= 1
 void debug_print_type(token_type_t type);
@@ -116,7 +120,7 @@ int main(int argc, char *argv[])
   // Let user know we are running the file now.
   printf("Running BASIC script %s\r\n", argv[1]);
 
-  while (lexline(fp) == 0);
+  while (LexLine(fp) == 0);
 
   // Done! Close file.
   fclose(fp);
@@ -126,7 +130,7 @@ int main(int argc, char *argv[])
 }
 
 // Function Definitions -----
-int lexline(FILE *f)
+int LexLine(FILE *f)
 {
   char ch;
 
@@ -152,7 +156,7 @@ int lexline(FILE *f)
 #endif
 
   // Interpret the line
-  if (interpret() == rFAILURE) {
+  if (Interpret() == rFAILURE) {
     puts("Parse error!");
     return rFAILURE;
   }
@@ -173,7 +177,7 @@ int lexline(FILE *f)
 }
 
 
-int interpret(void)
+int Interpret(void)
 {
   char ch;
   int idx1 = 0, idx2 = 0;
@@ -182,31 +186,31 @@ int interpret(void)
   linebuf_idx = 0;
 
   //
-  while (!lexisendofline(linebuf[linebuf_idx])) {
+  while (!LexIsEndOfLine(linebuf[linebuf_idx])) {
     ch = linebuf[linebuf_idx];
-    if (lexiswhitespace(ch)) {
+    if (LexIsWhiteSpace(ch)) {
       // Ignore white spaces
       linebuf_idx++;
-    } else if (lexisIinlinecomment(ch)) {
+    } else if (LexIsInlineComment(ch)) {
       // Ignore comments
 #if DEBUG >= 1
       printf("Comment: %s\r\n", linebuf + linebuf_idx + 1);
 #endif
       break;
-    } else if (lexisdigit(ch)) {
+    } else if (LexIsDigit(ch)) {
       // Check number format (dec, hex, etc.)
-      lexisnumber(&idx1, &idx2);
+      LexIsNumber(&idx1, &idx2);
       // Save token name and type as NUMBER
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = NUMBER;
       tokens[tokp++].name[idx2 - idx1] = '\0';
-    } else if (lexisdoublequote(ch)) {
+    } else if (LexIsDoubleQuote(ch)) {
       // Check for string literals
       idx1 = linebuf_idx + 1;
       do {
         // Make sure string is properly terminated
         ch = linebuf[linebuf_idx++];
-        if (lexisendofline(ch)) {
+        if (LexIsEndOfLine(ch)) {
           puts("STRING FAILURE");
           return rFAILURE;
         }
@@ -217,7 +221,7 @@ int interpret(void)
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = STRING;
       tokens[tokp++].name[idx2 - idx1] = '\0';
-    } else if (lexisoperator(ch)) {
+    } else if (LexIsOperator(ch)) {
       // Operators
       // Check two-character operators first
       int o;
@@ -240,12 +244,12 @@ int interpret(void)
         tokens[tokp++].type = OPERATOR;
         linebuf_idx++;
       }
-    } else if (lexisalpha(ch)) {
+    } else if (LexIsAlpha(ch)) {
       // Identifiers
       idx1 = linebuf_idx;
-      while (lexisalpha(ch) || lexisdigit(ch)) {
+      while (LexIsAlpha(ch) || LexIsDigit(ch)) {
         ch = linebuf[++linebuf_idx];
-        if (lexisendofline(ch) || lexiswhitespace(ch)) {
+        if (LexIsEndOfLine(ch) || LexIsWhiteSpace(ch)) {
           break;
         }
       }
@@ -253,9 +257,17 @@ int interpret(void)
 
       // Save token name and type as IDENTIFIER
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
-      tokens[tokp].type = IDENTIFIER;
-      tokens[tokp++].name[idx2 - idx1] = '\0';
-    } else if (iseof(ch)) {
+      tokens[tokp].name[idx2 - idx1] = '\0';
+
+      // Determine if they are keywords or variables
+      if (LexIsKeyword(tokens[tokp].name)) {
+        tokens[tokp].type = KEYWORD;
+      } else {
+        tokens[tokp].type = VARIABLE;
+      }
+
+      tokp++;
+    } else if (LexIsEOF(ch)) {
       return rSUCCESS;
     } else {
       // Error: unrecognized token
@@ -276,12 +288,12 @@ int interpret(void)
   return rSUCCESS;
 }
 
-int lexisnumber(int *idx1, int *idx2)
+int LexIsNumber(int *idx1, int *idx2)
 {
   char ch;
 
   ch = linebuf[linebuf_idx];
-  if (!lexisdigit(ch)) {
+  if (!LexIsDigit(ch)) {
     return 0;
   }
 
@@ -291,14 +303,14 @@ int lexisnumber(int *idx1, int *idx2)
     // Hex
     do {
       ch = linebuf[++linebuf_idx];
-    } while (lexishexdigit(ch));
+    } while (LexIsHexDigit(ch));
   } else if (ch == 'b' || ch == 'B') {
     // Binary
     do {
       ch = linebuf[++linebuf_idx];
-    } while (lexisbindigit(ch));
+    } while (LexIsBinDigit(ch));
   } else {
-    while (lexisdigit(ch)) {
+    while (LexIsDigit(ch)) {
       ch = linebuf[++linebuf_idx];
     }
   } 
@@ -312,7 +324,7 @@ int lexisnumber(int *idx1, int *idx2)
  *          character is a EOF character or not.
  *  @param  c Character of interest.
  */
-int iseof(char c)
+int LexIsEOF(char c)
 {
   return (c == '\0' ? 1 : 0);
 }
@@ -322,7 +334,7 @@ int iseof(char c)
  *          character is a newline character or not.
  *  @param  c Character of interest.
  */
-int lexisendofline(char c)
+int LexIsEndOfLine(char c)
 {
   return (c == '\n' ? 1 : 0);
 }
@@ -332,7 +344,7 @@ int lexisendofline(char c)
  *          character is a white space character or not.
  *  @param  c Character of interest.
  */
-int lexiswhitespace(char c)
+int LexIsWhiteSpace(char c)
 {
   if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
     return 1;
@@ -346,7 +358,7 @@ int lexiswhitespace(char c)
  *          character is the start of an inline comment.
  *  @param  c Character of interest.
  */
-int lexisIinlinecomment(char c)
+int LexIsInlineComment(char c)
 {
   if (c == '#') {
     return 1;
@@ -360,7 +372,7 @@ int lexisIinlinecomment(char c)
  *          character is a double quote or not.
  *  @param  c Character of interest.
  */
-int lexisdoublequote(char c)
+int LexIsDoubleQuote(char c)
 {
   return (c == '"' ? 1 : 0);
 }
@@ -370,7 +382,7 @@ int lexisdoublequote(char c)
  *          character is an operator or not.
  *  @param  c Character of interest.
  */
-int lexisoperator(char c)
+int LexIsOperator(char c)
 {
   int i;
   for (i = 0; single_char_operators[i]; i++) {
@@ -387,7 +399,7 @@ int lexisoperator(char c)
  *          character is an alphabetical character or not.
  *  @param  c Character of interest.
  */
-int lexisalpha(char c)
+int LexIsAlpha(char c)
 {
   if ('A' <= c && c <= 'Z') {
     return 1;
@@ -405,7 +417,7 @@ int lexisalpha(char c)
  *          character is a digit or not.
  *  @param  c Character of interest.
  */
-int lexisdigit(char c)
+int LexIsDigit(char c)
 {
   if ('0' <= c && c <= '9') {
     return 1;
@@ -419,7 +431,7 @@ int lexisdigit(char c)
  *          character is a binary digit or not.
  *  @param  c Character of interest.
  */
-int lexisbindigit(char c)
+int LexIsBinDigit(char c)
 {
   if (c == '0' || c == '1') {
     return 1;
@@ -433,9 +445,9 @@ int lexisbindigit(char c)
  *          character is a hexadecimal digit or not.
  *  @param  c Character of interest.
  */
-int lexishexdigit(char c)
+int LexIsHexDigit(char c)
 {
-  if (lexisdigit(c) || ('A' <= c && c <= 'F')
+  if (LexIsDigit(c) || ('A' <= c && c <= 'F')
       || ('a' <= c && c <= 'f')) {
     return 1;
   }
@@ -448,8 +460,15 @@ int lexishexdigit(char c)
  *          identifier is a keyword or not.
  *  @param  
  */
-int lexiskeyword(char *id, uint32_t len)
+int LexIsKeyword(char *id)
 {
+  int i;
+  for (i = 0; keywords[i]; i++) {
+    if (strcmp(id, keywords[i]) == 0) {
+      return 1;
+    }
+  }
+
   return 0;
 }
 
@@ -458,9 +477,9 @@ int lexiskeyword(char *id, uint32_t len)
  *          identifier is a variable or not.
  *  @param  
  */
-int lexisvariable(char *id, uint32_t len)
+int LexIsVariable(char *id)
 {
-  return 0;
+  return !LexIsKeyword(id);
 }
 
 #if DEBUG >= 1
