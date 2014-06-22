@@ -10,19 +10,23 @@ CC = gcc
 CFLAGS=-std=c99 -pedantic -Wall
 
 ## Root Directories
+ROOT_DIR = .
 BUILD_DIR = ./bin
 OBJECT_DIR = ./obj
 PROJ_SRC_DIR = ./src
+PROJ_INC_DIR = ./inc
 
 ## Where to find source files
-VPATH = $(PROJ_SRC_DIR)
+VPATH = $(ROOT_DIR)/$(PROJ_SRC_DIR)
 
 ## Where to find header files
-
+IPATH = $(ROOT_DIR)/$(PROJ_INC_DIR)
+INCPATH = $(patsubst %,-I%, $(IPATH))
 
 #************************************
 ## Source files
-SRCS = basic.c
+SRCS  = main.c
+SRCS += basic.c
 
 ## Object files
 OBJS = $(patsubst %.c,%.o,$(SRCS))
@@ -50,7 +54,7 @@ mkbuilddir:
 ## Rule to generate executable code
 ${PROJECT_OUT}: ${SRCS}
 	@echo "out $^ $@"
-	${CC} ${CFLAGS} $^ -o $@
+	${CC} ${CFLAGS} ${INCPATH} $^ -o $@
 
 ## Eye candy rules
 begin:
@@ -67,6 +71,8 @@ debug:
 	@echo OBJS = ${OBJS}
 	@echo
 	@echo VPATH = ${VPATH}
+	@echo
+	@echo INCPATH = ${INCPATH}
 	@echo
 
 

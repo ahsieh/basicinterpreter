@@ -1,14 +1,15 @@
 PRINT "Hello, World!"
 LET x = 0xDEADBEEF
 LET y = 0b11010---3
-LET zdaf=35+0x1b3+0b111
+LET _zdaf=35+0x1b3+0b111 - 0x
 
 # This is a comment.
 
-Label_Test:
+Label_Test: # This is a label
 IF (x==y) THEN:
 	PRINT "How are these equal?!"
 	zdaf = x & y | 0x3
 	y = x * x
 END
 
+PRINT "Invalid string...
