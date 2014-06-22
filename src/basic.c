@@ -6,15 +6,22 @@
 // Defines -----
 #define LINEBUF_LEN     512
 #define STACK_SIZE      512
+// Variables limitations
 #define MAX_VAR_COUNT   512
 #define VAR_NAME_LEN    64
-#define TOK_NAME_LEN    64
+// Labels limitations
+#define MAX_LABEL_COUNT 64
+#define LABEL_NAME_LEN  64
+// Tokens limitations
 #define MAX_TOK_COUNT   32
+#define TOK_NAME_LEN    64
 
+// Return types
 #define rSUCCESS        0
 #define rFAILURE        1
 #define rEOF            2
 
+// Debug enable (1) or disable (0)
 #define DEBUG           1
 
 // Keyword Enums
@@ -30,6 +37,7 @@ typedef enum {
   IDENTIFIER,
   VARIABLE,
   KEYWORD,
+  LABEL
 } token_type_t;
 
 // Variable data structure
@@ -79,8 +87,7 @@ const char *double_char_operators[] = {
 
 
 // Function Prototypes -----
-int LexLine(FILE *f);
-int Interpret(void);
+int LexAnalyzeLine(FILE *f);
 int LexIsEOF(char c);
 int LexIsEndOfLine(char c);
 int LexIsWhiteSpace(char c);
@@ -88,12 +95,16 @@ int LexIsInlineComment(char c);
 int LexIsDoubleQuote(char c);
 int LexIsOperator(char c);
 int LexIsAlpha(char c);
-int LexIsNumber(int *idx1, int *idx2);
+int LexIsInteger(int *idx1, int *idx2);
 int LexIsDigit(char c);
 int LexIsBinDigit(char c);
 int LexIsHexDigit(char c);
 int LexIsKeyword(char *id);
 int LexIsVariable(char *id);
+int LexIsLabel(char *id);
+
+// Local function prototypes -----
+static int LexInterpretLine(void);
 
 #if DEBUG >= 1
 void debug_print_type(token_type_t type);
@@ -120,7 +131,7 @@ int main(int argc, char *argv[])
   // Let user know we are running the file now.
   printf("Running BASIC script %s\r\n", argv[1]);
 
-  while (LexLine(fp) == 0);
+  while (LexAnalyzeLine(fp) == 0);
 
   // Done! Close file.
   fclose(fp);
@@ -130,7 +141,7 @@ int main(int argc, char *argv[])
 }
 
 // Function Definitions -----
-int LexLine(FILE *f)
+int LexAnalyzeLine(FILE *f)
 {
   char ch;
 
@@ -155,8 +166,8 @@ int LexLine(FILE *f)
   printf("Line #%d: %s", line_count, linebuf);
 #endif
 
-  // Interpret the line
-  if (Interpret() == rFAILURE) {
+  // LexInterpretLine the line
+  if (LexInterpretLine() == rFAILURE) {
     puts("Parse error!");
     return rFAILURE;
   }
@@ -177,7 +188,7 @@ int LexLine(FILE *f)
 }
 
 
-int Interpret(void)
+static int LexInterpretLine(void)
 {
   char ch;
   int idx1 = 0, idx2 = 0;
@@ -199,7 +210,7 @@ int Interpret(void)
       break;
     } else if (LexIsDigit(ch)) {
       // Check number format (dec, hex, etc.)
-      LexIsNumber(&idx1, &idx2);
+      LexIsInteger(&idx1, &idx2);
       // Save token name and type as NUMBER
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].type = NUMBER;
@@ -245,7 +256,6 @@ int Interpret(void)
         linebuf_idx++;
       }
     } else if (LexIsAlpha(ch)) {
-      // Identifiers
       idx1 = linebuf_idx;
       while (LexIsAlpha(ch) || LexIsDigit(ch)) {
         ch = linebuf[++linebuf_idx];
@@ -255,15 +265,24 @@ int Interpret(void)
       }
       idx2 = linebuf_idx;
 
-      // Save token name and type as IDENTIFIER
+      // Save token name 
       memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
       tokens[tokp].name[idx2 - idx1] = '\0';
 
-      // Determine if they are keywords or variables
+      // Determine if they are keywords, labels, or variables
       if (LexIsKeyword(tokens[tokp].name)) {
+        // Keyword
         tokens[tokp].type = KEYWORD;
       } else {
-        tokens[tokp].type = VARIABLE;
+        // Check if we have a label
+        if (linebuf[linebuf_idx] == ':') {
+          // Label
+          tokens[tokp].type = LABEL;
+          linebuf_idx++;
+        } else {
+          // Variable
+          tokens[tokp].type = VARIABLE;
+        }
       }
 
       tokp++;
@@ -288,7 +307,13 @@ int Interpret(void)
   return rSUCCESS;
 }
 
-int LexIsNumber(int *idx1, int *idx2)
+/**
+ *  @brief  Helps lexical analyzer determine if the given
+ *          character is a integer (signed or unsigned).
+ *  @param  idx1  Start index in linebuf (inclusive)
+ *  @param  idx2  End index in linebuf (exclusive)
+ */
+int LexIsInteger(int *idx1, int *idx2)
 {
   char ch;
 
@@ -409,6 +434,10 @@ int LexIsAlpha(char c)
     return 1;
   }
 
+  if (c == '_') {
+    return 1;
+  }
+
   return 0;
 }
 
@@ -475,11 +504,21 @@ int LexIsKeyword(char *id)
 /**
  *  @brief  Helps lexical analyzer determine if the given
  *          identifier is a variable or not.
- *  @param  
+ *  @param  id  
  */
 int LexIsVariable(char *id)
 {
   return !LexIsKeyword(id);
+}
+
+/**
+ *  @brief  Helps lexical analyzer determine if the given
+ *          identifier is a variable or not.
+ *  @param  idx1  
+ */
+int LexIsLabel(char *id)
+{
+  return 0;
 }
 
 #if DEBUG >= 1
@@ -503,6 +542,9 @@ void debug_print_type(token_type_t type)
       break;
     case KEYWORD:
       printf("Keyword");
+      break;
+    case LABEL:
+      printf("Label");
       break;
     default:
       break;
