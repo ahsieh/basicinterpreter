@@ -5,17 +5,19 @@
 #include <stdint.h>
 
 /* Defines ------------------------------------------------------------------ */
-#define LINEBUF_LEN     512
-#define STACK_SIZE      512
+#define LINEBUF_LEN           512
+#define STACK_SIZE            512
 // Variables limitations
-#define MAX_VAR_COUNT   512
-#define VAR_NAME_LEN    64
+#define MAX_VAR_COUNT         512
+#define VAR_NAME_LEN          64
 // Labels limitations
-#define MAX_LABEL_COUNT 64
-#define LABEL_NAME_LEN  64
+#define MAX_LABEL_COUNT       64
+#define LABEL_NAME_LEN        64
 // Tokens limitations
-#define MAX_TOK_COUNT   32
-#define TOK_NAME_LEN    64
+#define MAX_TOK_COUNT         32
+#define TOK_NAME_LEN          64
+// Parser limitations
+#define NUM_PARSE_TREE_NODES  128
 
 // Return types
 #define rSUCCESS        0
@@ -37,8 +39,8 @@ typedef enum {
   OPERATOR,
   IDENTIFIER,
   VARIABLE,
-  KEYWORD,
-  LABEL
+  LABEL,
+  KEYWORD
 } token_type_t;
 
 // Variable data structure
@@ -52,6 +54,14 @@ typedef struct {
   char          name[TOK_NAME_LEN];
   token_type_t  type;
 } token_t;
+
+// Parser Tree Node
+typedef struct {
+  token_t *self;
+  token_t *parent;
+  token_t *left_child;
+  token_t *right_child;
+} parser_node_t;
 
 /* Function Prototypes ------------------------------------------------------ */
 int BasicInterpret(FILE *f);
@@ -69,10 +79,11 @@ int LexIsHexDigit(char c);
 int LexIsKeyword(char *id);
 int LexIsVariable(char *id);
 int LexIsLabel(char *id);
-char *LexCurrentLine(void);
-char *LexErrorMessage(void);
-int LexCurrentLineCount(void);
-int LexCurrentColumnCount(void);
+char *LexGetCurrentLine(void);
+char *LexGetErrorMessage(void);
+int LexGetCurrentLineCount(void);
+int LexGetCurrentColumnCount(void);
+int ParseLine(void);
 
 #endif /* __BASIC_INTERPRETER_H__ */
 

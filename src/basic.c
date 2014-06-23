@@ -16,7 +16,9 @@ static uint32_t tokp = 0;
 // Line and column trackers
 static uint32_t line_count = 0, col_count = 0;
 // Error message
-static char lex_error_message[32];
+static char error_message[32];
+// Parse tree
+static parser_node_t parse_tree[NUM_PARSE_TREE_NODES];
 /*
 // Run-Time Stack and Stack Pointer
 static uint32_t stack[STACK_SIZE], sp = 0;
@@ -45,6 +47,8 @@ const char *double_char_operators[] = {
 
 /* Private Function Prototypes ---------------------------------------------- */
 static int LexAnalyzeLine(void);
+static keyword_t ParseGetKeyword(uint32_t kptr);
+static int StatementPrint(uint32_t curr_tok);
 #if DEBUG >= 1
 static void debug_print_type(token_type_t type);
 #else
@@ -76,7 +80,7 @@ int BasicInterpret(FILE *f)
     // 
     if (linebuf_idx == LINEBUF_LEN && ch != '\n') {
       col_count = LINEBUF_LEN;
-      sprintf(lex_error_message, "Line length exceed");
+      sprintf(error_message, "Line length exceed");
       return rFAILURE;
     }
 
@@ -87,6 +91,10 @@ int BasicInterpret(FILE *f)
 
     // LexAnalyzeLine the line
     if (LexAnalyzeLine() == rFAILURE) {
+      return rFAILURE;
+    }
+
+    if (ParseLine() == rFAILURE) {
       return rFAILURE;
     }
 
@@ -324,26 +332,56 @@ int LexIsLabel(char *id)
   return 0;
 }
 
-char *LexCurrentLine(void)
+char *LexGetCurrentLine(void)
 {
   return linebuf;
 }
 
-char *LexErrorMessage(void)
+char *LexGetErrorMessage(void)
 {
-  return lex_error_message;
+  return error_message;
 }
 
-int LexCurrentLineCount(void)
+int LexGetCurrentLineCount(void)
 {
   return line_count;
 }
 
-int LexCurrentColumnCount(void)
+int LexGetCurrentColumnCount(void)
 {
   return col_count;
 }
 
+int ParseLine(void)
+{
+#if 0
+  puts("*** Parsing Line ***");
+  printf("Line #: %d\n", line_count);
+  printf("Num tokens: %d\n", tokp);
+  puts(linebuf);
+#endif
+
+  int result = rSUCCESS;
+  uint32_t curr_tok = 0;
+
+  if (tokens[curr_tok].type == KEYWORD) {
+    //
+    switch (ParseGetKeyword(curr_tok++)) {
+      case PRINT:
+        result = StatementPrint(curr_tok);
+        break;
+      default:
+        break;
+    }
+  } else {
+    // TODO Update error message
+    //return rFAILURE;
+  }
+
+  return result;
+}
+
+/* Local Function Definitions ----------------------------------------------- */
 static int LexAnalyzeLine(void)
 {
   char ch;
@@ -377,7 +415,7 @@ static int LexAnalyzeLine(void)
         ch = linebuf[linebuf_idx++];
         if (LexIsEndOfLine(ch)) {
           col_count = linebuf_idx;
-          sprintf(lex_error_message, "Invalid string");
+          sprintf(error_message, "Invalid string");
           return rFAILURE;
         }
       } while (linebuf[linebuf_idx] != '"');
@@ -446,7 +484,7 @@ static int LexAnalyzeLine(void)
     } else {
       // Error: unrecognized token
       col_count = linebuf_idx;
-      sprintf(lex_error_message, "Invalid token");
+      sprintf(error_message, "Invalid token");
       return rFAILURE;
     }
   }
@@ -461,6 +499,42 @@ static int LexAnalyzeLine(void)
   puts("");
 #endif
 
+  return rSUCCESS;
+}
+
+static keyword_t ParseGetKeyword(uint32_t kptr)
+{
+  int i;
+  for (i = 0; keywords[i]; i++) {
+    if (strcmp(tokens[kptr].name, keywords[i]) == 0) {
+      break;
+    }
+  }
+
+  return i;
+}
+
+static int StatementPrint(uint32_t curr_tok)
+{
+  // PRINT <> | <print_obj> [ '+' <print_obj]*
+  // print_obj := STRING | VARIABLE
+  printf(">> ");
+  if (curr_tok < tokp) {
+    while (tokens[curr_tok].type == STRING || 
+           tokens[curr_tok].type == VARIABLE) {
+      printf("%s", tokens[curr_tok++].name);
+      if (curr_tok < tokp && strcmp(tokens[curr_tok].name, "+") == 0) {
+        curr_tok++;
+      } else if (curr_tok == tokp) {
+        break;
+      } else {
+        sprintf(error_message, "Invalid syntax: '+' missing?");
+        puts("");
+        return rFAILURE;
+      }
+    }
+  }
+  puts("");
   return rSUCCESS;
 }
 

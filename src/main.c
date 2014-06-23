@@ -31,16 +31,16 @@ int main(int argc, char *argv[])
   printf("Running BASIC script %s\r\n", argv[1]);
 
   if (BasicInterpret(fp) != rSUCCESS) {
-    printf("Error: Line: %d, Column: %d", LexCurrentLineCount(), LexCurrentColumnCount());
+    printf("Error: Line: %d, Column: %d", LexGetCurrentLineCount(), LexGetCurrentColumnCount());
     puts("");
 
-    printf("%s", LexCurrentLine());
+    printf("%s", LexGetCurrentLine());
     int i;
-    for (i = 0; i < LexCurrentColumnCount() - 1; i++) {
+    for (i = 0; i < LexGetCurrentColumnCount() - 1; i++) {
       printf(" ");
     }
     puts("^");
-    puts(LexErrorMessage());
+    puts(LexGetErrorMessage());
   }
 
   // Done! Close file.

@@ -7,7 +7,7 @@ PROJECT = basicinterp
 
 ## Compiler Definitions
 CC = gcc
-CFLAGS=-std=c99 -pedantic -Wall
+CFLAGS=-std=c99 -pedantic -Wall -O
 
 ## Root Directories
 ROOT_DIR = .
@@ -27,6 +27,9 @@ INCPATH = $(patsubst %,-I%, $(IPATH))
 ## Source files
 SRCS  = main.c
 SRCS += basic.c
+
+## Dependencies
+DEPS = basic.h
 
 ## Object files
 OBJS = $(patsubst %.c,%.o,$(SRCS))
@@ -69,6 +72,8 @@ debug:
 	@echo SRCS = ${SRCS}
 	@echo
 	@echo OBJS = ${OBJS}
+	@echo
+	@echo DEPS = ${DEPS}
 	@echo
 	@echo VPATH = ${VPATH}
 	@echo
