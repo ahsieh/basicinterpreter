@@ -13,6 +13,9 @@ char debug_buf[128];
 #else
 #define DEBUG_PRINTF(...)
 #endif
+
+#define CONSOLE_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__);
+
 /* Local Variables ---------------------------------------------------------- */
 // Lexer buffer
 static uint32_t linebuf_idx = 0;
@@ -72,17 +75,14 @@ int BasicCommandLine(void)
   if (fgets(linebuf, LINEBUF_LEN, stdin)) {
     // LexAnalyzeLine the line
     if (LexAnalyzeLine() == rFAILURE) {
-puts("Lex failed");
       return rFAILURE;
     }
 
     if (ParseLine() == rFAILURE) {
-puts("Parse failed");
       return rFAILURE;
     }
     memset(linebuf, 0, LINEBUF_LEN);
   } else {
-puts("ummmmm");
     return rFAILURE;
   }
 
@@ -545,36 +545,38 @@ static keyword_t ParseGetKeyword(uint32_t kptr)
 
 static int StatementPrint(uint32_t curr_tok)
 {
-  // PRINT <> | <print_obj> [ '+' <print_obj]*
-  // print_obj := STRING | VARIABLE
+  // PRINT Syntax
+  // PRINT      :== 'PRINT' [PRINT_OBJ] { '+' PRINT_OBJ }*
+  // PRINT_OBJ  :== STRING | VARIABLE
   if (curr_tok < tokp) {
     while (curr_tok < tokp) {
       if (tokens[curr_tok].type == STRING || 
           tokens[curr_tok].type == VARIABLE) {
-        printf("%s", tokens[curr_tok++].name);
+        CONSOLE_PRINTF("%s", tokens[curr_tok++].name);
         if (curr_tok < tokp && strcmp(tokens[curr_tok].name, "+") == 0) {
           if (curr_tok + 1 < tokp) {
             curr_tok++;
           } else {
             sprintf(error_message, "Invalid syntax: Missing token.");
-            puts("");
+            CONSOLE_PRINTF("\n");
             return rFAILURE;
           }
         } else if (curr_tok == tokp) {
           break;
         } else {
           sprintf(error_message, "Invalid syntax: '+' missing?");
-          puts("");
+          CONSOLE_PRINTF("\n");
           return rFAILURE;
         }
       } else {
         sprintf(error_message, "Invalid syntax: Bad token.");
-        puts("");
+        CONSOLE_PRINTF("\n");
         return rFAILURE;
       }
     }
   }
-  puts("");
+  CONSOLE_PRINTF("\n");
+
   return rSUCCESS;
 }
 

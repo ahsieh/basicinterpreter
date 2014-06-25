@@ -7,7 +7,7 @@ PROJECT = basicinterp
 
 ## Compiler Definitions
 CC = gcc
-CFLAGS=-std=c99 -pedantic -Wall -O
+CFLAGS=-std=c99 -Wall -O
 
 ## Root Directories
 ROOT_DIR = .
