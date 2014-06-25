@@ -64,6 +64,7 @@ typedef struct {
 } parser_node_t;
 
 /* Function Prototypes ------------------------------------------------------ */
+int BasicCommandLine(void);
 int BasicInterpret(FILE *f);
 int LexIsEOF(char c);
 int LexIsEndOfLine(char c);

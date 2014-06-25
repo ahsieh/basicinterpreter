@@ -6,6 +6,13 @@
 #include "basic.h"
 
 /* Defines ------------------------------------------------------------------ */
+#if DEBUG > 0
+char debug_buf[128];
+#define DEBUG_PRINTF(fmt, ...) \
+  do { sprintf(debug_buf, fmt, ##__VA_ARGS__); puts(debug_buf); } while (0)
+#else
+#define DEBUG_PRINTF(...)
+#endif
 /* Local Variables ---------------------------------------------------------- */
 // Lexer buffer
 static uint32_t linebuf_idx = 0;
@@ -57,6 +64,32 @@ static void debug_print_type(token_type_t type);
 
 /* Function Definitions ----------------------------------------------------- */
 /**
+ *  @brief  Interpret incoming lines entered by user.
+ */
+int BasicCommandLine(void)
+{
+  tokp = 0;
+  if (fgets(linebuf, LINEBUF_LEN, stdin)) {
+    // LexAnalyzeLine the line
+    if (LexAnalyzeLine() == rFAILURE) {
+puts("Lex failed");
+      return rFAILURE;
+    }
+
+    if (ParseLine() == rFAILURE) {
+puts("Parse failed");
+      return rFAILURE;
+    }
+    memset(linebuf, 0, LINEBUF_LEN);
+  } else {
+puts("ummmmm");
+    return rFAILURE;
+  }
+
+  return rSUCCESS;
+}
+
+/**
  *  @brief  Interpret the given file.
  *  @param  f File pointer to program
  */
@@ -84,10 +117,8 @@ int BasicInterpret(FILE *f)
       return rFAILURE;
     }
 
-#if (DEBUG == 1)
-    // Debug
-    printf("Line #%d: %s", line_count, linebuf);
-#endif
+    //
+    DEBUG_PRINTF("Line #%d: %s", line_count, linebuf);
 
     // LexAnalyzeLine the line
     if (LexAnalyzeLine() == rFAILURE) {
@@ -398,9 +429,7 @@ static int LexAnalyzeLine(void)
       linebuf_idx++;
     } else if (LexIsInlineComment(ch)) {
       // Ignore comments
-#if DEBUG >= 1
-      printf("Comment: %s\r\n", linebuf + linebuf_idx + 1);
-#endif
+      DEBUG_PRINTF("Comment: %s", linebuf + linebuf_idx + 1);
       break;
     } else if (LexIsDigit(ch) && LexIsInteger(&idx1, &idx2)) {
       // Save token name and type as NUMBER
@@ -518,17 +547,28 @@ static int StatementPrint(uint32_t curr_tok)
 {
   // PRINT <> | <print_obj> [ '+' <print_obj]*
   // print_obj := STRING | VARIABLE
-  printf(">> ");
   if (curr_tok < tokp) {
-    while (tokens[curr_tok].type == STRING || 
-           tokens[curr_tok].type == VARIABLE) {
-      printf("%s", tokens[curr_tok++].name);
-      if (curr_tok < tokp && strcmp(tokens[curr_tok].name, "+") == 0) {
-        curr_tok++;
-      } else if (curr_tok == tokp) {
-        break;
+    while (curr_tok < tokp) {
+      if (tokens[curr_tok].type == STRING || 
+          tokens[curr_tok].type == VARIABLE) {
+        printf("%s", tokens[curr_tok++].name);
+        if (curr_tok < tokp && strcmp(tokens[curr_tok].name, "+") == 0) {
+          if (curr_tok + 1 < tokp) {
+            curr_tok++;
+          } else {
+            sprintf(error_message, "Invalid syntax: Missing token.");
+            puts("");
+            return rFAILURE;
+          }
+        } else if (curr_tok == tokp) {
+          break;
+        } else {
+          sprintf(error_message, "Invalid syntax: '+' missing?");
+          puts("");
+          return rFAILURE;
+        }
       } else {
-        sprintf(error_message, "Invalid syntax: '+' missing?");
+        sprintf(error_message, "Invalid syntax: Bad token.");
         puts("");
         return rFAILURE;
       }
