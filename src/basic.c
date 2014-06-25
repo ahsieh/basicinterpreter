@@ -39,7 +39,9 @@ static var_t vars[MAX_VAR_COUNT];
 /* Constants ---------------------------------------------------------------- */
 const char *keywords[] = {
   "PRINT",
-  "LET",
+  "VAR",
+  "INT8",
+  "UINT8",
   "IF",
   "THEN",
   "ELSE",
@@ -48,7 +50,8 @@ const char *keywords[] = {
 
 const char *single_char_operators[] = {
   "(", ")", "=", "+", "-", "*", "/", ":",
-  "&", "|", "!"
+  "&", "|", "!",
+  ","
 };
 
 const char *double_char_operators[] = {
@@ -57,8 +60,13 @@ const char *double_char_operators[] = {
 
 /* Private Function Prototypes ---------------------------------------------- */
 static int LexAnalyzeLine(void);
-static keyword_t ParseGetKeyword(uint32_t kptr);
+static int ParseGetKeyword(uint32_t kptr);
 static int StatementPrint(uint32_t curr_tok);
+static int StatementVar(uint32_t curr_tok);
+static int VarIsList(uint32_t *curr_tok);
+static int VarIsDeclaration(uint32_t *curr_tok);
+static int VarIsType(uint32_t *curr_tok, int *type);
+
 #if DEBUG >= 1
 static void debug_print_type(token_type_t type);
 #else
@@ -401,6 +409,9 @@ int ParseLine(void)
       case PRINT:
         result = StatementPrint(curr_tok);
         break;
+      case VAR:
+        result = StatementVar(curr_tok);
+        break;
       default:
         break;
     }
@@ -433,9 +444,14 @@ static int LexAnalyzeLine(void)
       break;
     } else if (LexIsDigit(ch) && LexIsInteger(&idx1, &idx2)) {
       // Save token name and type as NUMBER
-      memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
-      tokens[tokp].type = NUMBER;
-      tokens[tokp++].name[idx2 - idx1] = '\0';
+      if (idx2 - idx1 > TOK_NAME_LEN) {
+        sprintf(error_message, "Number length exceeds limit.");
+        return rFAILURE;
+      } else {
+        memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
+        tokens[tokp].type = NUMBER;
+        tokens[tokp++].name[idx2 - idx1] = '\0';
+      }
     } else if (LexIsDoubleQuote(ch)) {
       // Check for string literals
       idx1 = linebuf_idx + 1;
@@ -474,7 +490,16 @@ static int LexAnalyzeLine(void)
       if (o > 0) {
         tokens[tokp].name[0] = ch;
         tokens[tokp].name[1] = '\0';
-        tokens[tokp++].type = OPERATOR;
+
+        switch (ch) {
+          case ',':
+            tokens[tokp].type = COMMA;
+            break;
+          default:
+            tokens[tokp].type = OPERATOR;
+            break;
+        }
+        tokp++;
         linebuf_idx++;
       }
     } else if (LexIsAlpha(ch)) {
@@ -487,27 +512,31 @@ static int LexAnalyzeLine(void)
       }
       idx2 = linebuf_idx;
 
-      // Save token name 
-      memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
-      tokens[tokp].name[idx2 - idx1] = '\0';
-
-      // Determine if they are keywords, labels, or variables
-      if (LexIsKeyword(tokens[tokp].name)) {
-        // Keyword
-        tokens[tokp].type = KEYWORD;
+      if (idx2 - idx1 > TOK_NAME_LEN) {
+        sprintf(error_message, "Token length exceeds limit.");
+        return rFAILURE;
       } else {
-        // Check if we have a label
-        if (linebuf[linebuf_idx] == ':') {
-          // Label
-          tokens[tokp].type = LABEL;
-          linebuf_idx++;
-        } else {
-          // Variable
-          tokens[tokp].type = VARIABLE;
-        }
-      }
+        // Save token name 
+        memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
+        tokens[tokp].name[idx2 - idx1] = '\0';
 
-      tokp++;
+        // Determine if they are keywords, labels, or variables
+        if (LexIsKeyword(tokens[tokp].name)) {
+          // Keyword
+          tokens[tokp].type = KEYWORD;
+        } else {
+          // Check if we have a label
+          if (linebuf[linebuf_idx] == ':') {
+            // Label
+            tokens[tokp].type = LABEL;
+            linebuf_idx++;
+          } else {
+            // Variable
+            tokens[tokp].type = VARIABLE;
+          }
+        }
+        tokp++;
+      }
     } else if (LexIsEOF(ch)) {
       return rSUCCESS;
     } else {
@@ -531,7 +560,7 @@ static int LexAnalyzeLine(void)
   return rSUCCESS;
 }
 
-static keyword_t ParseGetKeyword(uint32_t kptr)
+static int ParseGetKeyword(uint32_t kptr)
 {
   int i;
   for (i = 0; keywords[i]; i++) {
@@ -580,6 +609,77 @@ static int StatementPrint(uint32_t curr_tok)
   return rSUCCESS;
 }
 
+static int StatementVar(uint32_t curr_tok)
+{
+  // VAR Syntax
+  // VAR              :== 'VAR' VAR_LIST VAR_TYPE
+  // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
+  // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
+  int var_type;
+  if (curr_tok < tokp) {
+    // Check VAR_LIST
+    if (VarIsList(&curr_tok) == rSUCCESS) {
+      if (VarIsType(&curr_tok, &var_type) == rSUCCESS) {
+        // Statement must end here.
+        if (curr_tok < tokp) {
+          return rFAILURE;
+        }
+
+        // Once we have a valid statement, we must interpret it properly.
+        // TODO
+      } else {
+        return rFAILURE;
+      }
+    } else {
+      return rFAILURE;
+    }
+  } else {
+    return rFAILURE;
+  }
+
+  return rSUCCESS;
+}
+
+static int VarIsList(uint32_t *curr_tok)
+{
+  // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
+  while (*curr_tok < tokp) {
+    if (VarIsDeclaration(curr_tok)) {
+      
+    } else {
+      return rFAILURE;
+    }
+  }
+
+  return rSUCCESS;
+}
+
+static int VarIsDeclaration(uint32_t *curr_tok)
+{
+  // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
+}
+
+static int VarIsType(uint32_t *curr_tok, int *type)
+{
+  int var_type;
+
+  if (tokens[*curr_tok].type != KEYWORD) {
+    return rFAILURE;
+  }
+
+  switch ((var_type = ParseGetKeyword((*curr_tok)++))) {
+    case INT8:
+    case UINT8:
+      *type = var_type;
+      break;
+    default:
+      return rFAILURE;
+  }
+
+  (*curr_tok)++;
+  return rSUCCESS;
+}
+
 #if DEBUG >= 1
 static void debug_print_type(token_type_t type)
 {
@@ -592,6 +692,9 @@ static void debug_print_type(token_type_t type)
       break;
     case OPERATOR:
       printf("Operator");
+      break;
+    case COMMA:
+      printf("Comma");
       break;
     case IDENTIFIER:
       printf("Identifier");

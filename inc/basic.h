@@ -30,17 +30,21 @@
 // Keyword Enums
 typedef enum {
   PRINT,
+  VAR,
+  INT8,
+  UINT8
 } keyword_t;
 
 // Token Enums
 typedef enum {
+  KEYWORD,
   NUMBER,
   STRING,
   OPERATOR,
+  COMMA,
   IDENTIFIER,
   VARIABLE,
   LABEL,
-  KEYWORD
 } token_type_t;
 
 // Variable data structure
