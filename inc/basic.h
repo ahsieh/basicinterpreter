@@ -55,7 +55,8 @@ typedef struct {
 
 // Token data structure
 typedef struct {
-  char          name[TOK_NAME_LEN];
+  int           idx1;
+  int           idx2;
   token_type_t  type;
 } token_t;
 
@@ -81,8 +82,8 @@ int LexIsInteger(int *idx1, int *idx2);
 int LexIsDigit(char c);
 int LexIsBinDigit(char c);
 int LexIsHexDigit(char c);
-int LexIsKeyword(char *id);
-int LexIsVariable(char *id);
+int LexIsKeyword(int idx1, int idx2);
+int LexIsVariable(int idx1, int idx2);
 int LexIsLabel(char *id);
 char *LexGetCurrentLine(void);
 char *LexGetErrorMessage(void);

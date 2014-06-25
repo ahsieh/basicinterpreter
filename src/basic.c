@@ -60,7 +60,7 @@ const char *double_char_operators[] = {
 
 /* Private Function Prototypes ---------------------------------------------- */
 static int LexAnalyzeLine(void);
-static int ParseGetKeyword(uint32_t kptr);
+static int ParseGetKeyword(uint32_t token_idx);
 static int StatementPrint(uint32_t curr_tok);
 static int StatementVar(uint32_t curr_tok);
 static int VarIsList(uint32_t *curr_tok);
@@ -339,11 +339,11 @@ int LexIsHexDigit(char c)
  *          identifier is a keyword or not.
  *  @param  
  */
-int LexIsKeyword(char *id)
+int LexIsKeyword(int idx1, int idx2)
 {
   int i;
   for (i = 0; keywords[i]; i++) {
-    if (strcmp(id, keywords[i]) == 0) {
+    if (memcmp(linebuf + idx1, keywords[i], idx2 - idx1) == 0) {
       return 1;
     }
   }
@@ -356,9 +356,9 @@ int LexIsKeyword(char *id)
  *          identifier is a variable or not.
  *  @param  id  
  */
-int LexIsVariable(char *id)
+int LexIsVariable(int idx1, int idx2)
 {
-  return !LexIsKeyword(id);
+  return !LexIsKeyword(idx1, idx2);
 }
 
 /**
@@ -406,12 +406,14 @@ int ParseLine(void)
   if (tokens[curr_tok].type == KEYWORD) {
     //
     switch (ParseGetKeyword(curr_tok++)) {
+#if 0
       case PRINT:
         result = StatementPrint(curr_tok);
         break;
       case VAR:
         result = StatementVar(curr_tok);
         break;
+#endif
       default:
         break;
     }
@@ -448,11 +450,13 @@ static int LexAnalyzeLine(void)
         sprintf(error_message, "Number length exceeds limit.");
         return rFAILURE;
       } else {
-        memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
+        tokens[tokp].idx1 = idx1;
+        tokens[tokp].idx2 = idx2;
         tokens[tokp].type = NUMBER;
-        tokens[tokp++].name[idx2 - idx1] = '\0';
+        tokp++;
       }
     } else if (LexIsDoubleQuote(ch)) {
+      // TODO Change where we store STRING literals.
       // Check for string literals
       idx1 = linebuf_idx + 1;
       do {
@@ -467,19 +471,22 @@ static int LexAnalyzeLine(void)
       idx2 = linebuf_idx++;
 
       // Save token name and type as STRING
-      memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
+      tokens[tokp].idx1 = idx1;
+      tokens[tokp].idx2 = idx2;
       tokens[tokp].type = STRING;
-      tokens[tokp++].name[idx2 - idx1] = '\0';
+      tokp++;
     } else if (LexIsOperator(ch)) {
       // Operators
       // Check two-character operators first
       int o;
       char buf[3];
+      idx1 = linebuf_idx;
       for (o = 0; double_char_operators[o]; o++) {
         memcpy(buf, linebuf + linebuf_idx, 2);
         buf[2] = 0;
         if (strcmp(buf, double_char_operators[o]) == 0) {
-          strcpy(tokens[tokp].name, buf);
+          tokens[tokp].idx1 = idx1;
+          tokens[tokp].idx2 = idx1 + 2;
           tokens[tokp++].type = OPERATOR;
           linebuf_idx += 2;
           o = -1;
@@ -488,9 +495,8 @@ static int LexAnalyzeLine(void)
       }
 
       if (o > 0) {
-        tokens[tokp].name[0] = ch;
-        tokens[tokp].name[1] = '\0';
-
+        tokens[tokp].idx1 = idx1;
+        tokens[tokp].idx2 = idx1 + 1;
         switch (ch) {
           case ',':
             tokens[tokp].type = COMMA;
@@ -517,11 +523,11 @@ static int LexAnalyzeLine(void)
         return rFAILURE;
       } else {
         // Save token name 
-        memcpy(tokens[tokp].name, linebuf + idx1, idx2 - idx1);
-        tokens[tokp].name[idx2 - idx1] = '\0';
+        tokens[tokp].idx1 = idx1;
+        tokens[tokp].idx2 = idx2;
 
         // Determine if they are keywords, labels, or variables
-        if (LexIsKeyword(tokens[tokp].name)) {
+        if (LexIsKeyword(tokens[tokp].idx1, tokens[tokp].idx2)) {
           // Keyword
           tokens[tokp].type = KEYWORD;
         } else {
@@ -549,8 +555,11 @@ static int LexAnalyzeLine(void)
 
 #if (DEBUG == 1)
   int i;
+  char buf[512];
   for (i = 0; i < tokp; i++) {
-    printf("Token %d: %s, type:", i, tokens[i].name);
+    memset(buf, 0, 512);
+    memcpy(buf, linebuf + tokens[i].idx1, tokens[i].idx2 - tokens[i].idx1);
+    printf("Token %d: %s, type:", i, buf);
     debug_print_type(tokens[i].type);
     puts("");
   }
@@ -560,11 +569,12 @@ static int LexAnalyzeLine(void)
   return rSUCCESS;
 }
 
-static int ParseGetKeyword(uint32_t kptr)
+static int ParseGetKeyword(uint32_t token_idx)
 {
   int i;
+  int idx1 = tokens[token_idx].idx1, idx2 = tokens[token_idx].idx2;
   for (i = 0; keywords[i]; i++) {
-    if (strcmp(tokens[kptr].name, keywords[i]) == 0) {
+    if (memcmp(linebuf + idx1, keywords[i], idx2 - idx1) == 0) {
       break;
     }
   }
@@ -574,6 +584,7 @@ static int ParseGetKeyword(uint32_t kptr)
 
 static int StatementPrint(uint32_t curr_tok)
 {
+#if 0
   // PRINT Syntax
   // PRINT      :== 'PRINT' [PRINT_OBJ] { '+' PRINT_OBJ }*
   // PRINT_OBJ  :== STRING | VARIABLE
@@ -606,6 +617,7 @@ static int StatementPrint(uint32_t curr_tok)
   }
   CONSOLE_PRINTF("\n");
 
+#endif
   return rSUCCESS;
 }
 
