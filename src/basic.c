@@ -58,20 +58,12 @@ const char *keywords[] = {
   "IF",
   "THEN",
   "ELSE",
-  "END"
-};
-
-const char *single_char_operators[] = {
-  "(", ")", "=", "+", "-", "*", "/", ":",
-  "&", "|", "!",
-  ",",
+  "END",
   ""
 };
 
-const char *double_char_operators[] = {
-  "==", "&&", "||",
-  ""
-};
+const char single_char_operators[] = "()=+-*/:&|!,";
+const char double_char_operators[] = "==&&||";
 
 /* Private Function Prototypes ---------------------------------------------- */
 static int LexAnalyzeLine(void);
@@ -276,8 +268,8 @@ int LexIsDoubleQuote(char c)
 int LexIsOperator(char c)
 {
   int i;
-  for (i = 0; single_char_operators[i]; i++) {
-    if (c == single_char_operators[i][0]) {
+  for (i = 0; i < strlen(single_char_operators); i++) {
+    if (c == single_char_operators[i]) {
       return 1;
     }
   }
@@ -493,12 +485,10 @@ static int LexAnalyzeLine(void)
       // Operators
       // Check two-character operators first
       int o;
-      char buf[3];
       idx1 = linebuf_idx;
-      for (o = 0; double_char_operators[o]; o++) {
-        memcpy(buf, linebuf + linebuf_idx, 2);
-        buf[2] = 0;
-        if (strcmp(buf, double_char_operators[o]) == 0) {
+      for (o = 0; o < strlen(double_char_operators); o += 2) {
+        if (ch == double_char_operators[o] &&
+                  linebuf[idx1 + 1] == double_char_operators[o + 1]) {
           tokens[tokp].idx1 = idx1;
           tokens[tokp].idx2 = idx1 + 2;
           tokens[tokp++].type = OPERATOR;
