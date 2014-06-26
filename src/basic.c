@@ -64,11 +64,13 @@ const char *keywords[] = {
 const char *single_char_operators[] = {
   "(", ")", "=", "+", "-", "*", "/", ":",
   "&", "|", "!",
-  ","
+  ",",
+  ""
 };
 
 const char *double_char_operators[] = {
-  "==", "&&", "||"
+  "==", "&&", "||",
+  ""
 };
 
 /* Private Function Prototypes ---------------------------------------------- */
