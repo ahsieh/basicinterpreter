@@ -27,7 +27,7 @@
 #define rEOF            2
 
 // Debug enable (1) or disable (0)
-#define DEBUG           1
+#define DEBUG           0
 
 // Keyword Enums
 typedef enum {

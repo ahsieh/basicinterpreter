@@ -93,6 +93,7 @@ static void debug_print_type(token_type_t type);
 int BasicCommandLine(void)
 {
   tokp = 0;
+  CONSOLE_PRINTF(">> ");
   if (fgets(linebuf, LINEBUF_LEN, stdin)) {
     // LexAnalyzeLine the line
     if (LexAnalyzeLine() == rFAILURE) {
