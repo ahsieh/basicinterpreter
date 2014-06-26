@@ -18,6 +18,8 @@
 #define TOK_NAME_LEN          64
 // Parser limitations
 #define NUM_PARSE_TREE_NODES  128
+// Console definitions
+#define CONSOLEBUF_LEN        LINEBUF_LEN
 
 // Return types
 #define rSUCCESS        0
@@ -41,6 +43,7 @@ typedef enum {
   NUMBER,
   STRING,
   OPERATOR,
+  PLUS,
   COMMA,
   IDENTIFIER,
   VARIABLE,

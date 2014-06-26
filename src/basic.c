@@ -9,12 +9,22 @@
 #if DEBUG > 0
 char debug_buf[128];
 #define DEBUG_PRINTF(fmt, ...) \
-  do { sprintf(debug_buf, fmt, ##__VA_ARGS__); puts(debug_buf); } while (0)
+  do { sprintf(debug_buf, fmt, ##__VA_ARGS__); puts(debug_buf); } while (0);
 #else
 #define DEBUG_PRINTF(...)
 #endif
 
-#define CONSOLE_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__);
+#define CONSOLE_PRINTF(fmt, ...) \
+  do { printf(fmt, ##__VA_ARGS__); } while (0);
+
+#define CONSOLE_ADD(t) \
+  do { \
+    memcpy(consolebuf + consolebuf_idx, linebuf + t.idx1, t.idx2 - t.idx1); \
+    consolebuf_idx += t.idx2 - t.idx1; \
+  } while (0);
+      
+#define CONSOLE_PRINTBUF() \
+  do { puts(consolebuf); } while (0);
 
 /* Local Variables ---------------------------------------------------------- */
 // Lexer buffer
@@ -35,6 +45,9 @@ static uint32_t stack[STACK_SIZE], sp = 0;
 // Variables
 static var_t vars[MAX_VAR_COUNT];
 */
+// Console output
+static int consolebuf_idx = 0;
+static char consolebuf[CONSOLEBUF_LEN];
 
 /* Constants ---------------------------------------------------------------- */
 const char *keywords[] = {
@@ -406,14 +419,12 @@ int ParseLine(void)
   if (tokens[curr_tok].type == KEYWORD) {
     //
     switch (ParseGetKeyword(curr_tok++)) {
-#if 0
       case PRINT:
         result = StatementPrint(curr_tok);
         break;
       case VAR:
         result = StatementVar(curr_tok);
         break;
-#endif
       default:
         break;
     }
@@ -498,6 +509,9 @@ static int LexAnalyzeLine(void)
         tokens[tokp].idx1 = idx1;
         tokens[tokp].idx2 = idx1 + 1;
         switch (ch) {
+          case '+':
+            tokens[tokp].type = PLUS;
+            break;
           case ',':
             tokens[tokp].type = COMMA;
             break;
@@ -584,40 +598,40 @@ static int ParseGetKeyword(uint32_t token_idx)
 
 static int StatementPrint(uint32_t curr_tok)
 {
-#if 0
   // PRINT Syntax
   // PRINT      :== 'PRINT' [PRINT_OBJ] { '+' PRINT_OBJ }*
   // PRINT_OBJ  :== STRING | VARIABLE
+  consolebuf_idx = 0;
+  memset(consolebuf, 0, CONSOLEBUF_LEN);
+
   if (curr_tok < tokp) {
     while (curr_tok < tokp) {
       if (tokens[curr_tok].type == STRING || 
           tokens[curr_tok].type == VARIABLE) {
-        CONSOLE_PRINTF("%s", tokens[curr_tok++].name);
-        if (curr_tok < tokp && strcmp(tokens[curr_tok].name, "+") == 0) {
+        CONSOLE_ADD(tokens[curr_tok]);
+        curr_tok++;
+
+        if (curr_tok < tokp && (tokens[curr_tok].type == PLUS)) {
           if (curr_tok + 1 < tokp) {
             curr_tok++;
           } else {
             sprintf(error_message, "Invalid syntax: Missing token.");
-            CONSOLE_PRINTF("\n");
             return rFAILURE;
           }
         } else if (curr_tok == tokp) {
           break;
         } else {
           sprintf(error_message, "Invalid syntax: '+' missing?");
-          CONSOLE_PRINTF("\n");
           return rFAILURE;
         }
       } else {
         sprintf(error_message, "Invalid syntax: Bad token.");
-        CONSOLE_PRINTF("\n");
         return rFAILURE;
       }
     }
   }
-  CONSOLE_PRINTF("\n");
 
-#endif
+  CONSOLE_PRINTBUF();
   return rSUCCESS;
 }
 
@@ -704,6 +718,9 @@ static void debug_print_type(token_type_t type)
       break;
     case OPERATOR:
       printf("Operator");
+      break;
+    case PLUS:
+      printf("Plus");
       break;
     case COMMA:
       printf("Comma");
