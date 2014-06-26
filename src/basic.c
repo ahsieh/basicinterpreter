@@ -508,6 +508,12 @@ static int LexAnalyzeLine(void)
           case ',':
             tokens[tokp].type = COMMA;
             break;
+          case '[':
+            tokens[tokp].type = OPEN_SQUARE_BRACKET;
+            break;
+          case ']':
+            tokens[tokp].type = CLOSED_SQUARE_BRACKET;
+            break;
           default:
             tokens[tokp].type = OPERATOR;
             break;
@@ -646,6 +652,12 @@ static int StatementVar(uint32_t curr_tok)
 
         // Once we have a valid statement, we must interpret it properly.
         // TODO
+        DEBUG_PRINTF("We have a valid variable statement!");
+        switch (var_type) {
+          case INT8: DEBUG_PRINTF("INT8"); break;
+          case UINT8: DEBUG_PRINTF("UINT8"); break;
+          default: break;
+        }
       } else {
         return rFAILURE;
       }
@@ -661,10 +673,17 @@ static int StatementVar(uint32_t curr_tok)
 
 static int VarIsList(uint32_t *curr_tok)
 {
-  // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
-  while (*curr_tok < tokp) {
-    if (VarIsDeclaration(curr_tok)) {
-      
+  // VAR_LIST :== VAR_DECLARATION {, VAR_DECLARATION}*
+  while ((*curr_tok) < tokp) {
+    if (VarIsDeclaration(curr_tok) == rSUCCESS) {
+      if ((*curr_tok) < tokp && tokens[*curr_tok].type == COMMA) {
+        (*curr_tok)++;
+        if ((*curr_tok) >= tokp) {
+          return rFAILURE;
+        }
+      } else {
+        break;
+      }
     } else {
       return rFAILURE;
     }
@@ -675,7 +694,30 @@ static int VarIsList(uint32_t *curr_tok)
 
 static int VarIsDeclaration(uint32_t *curr_tok)
 {
-  // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
+  // VAR_DECLARATION :== VARIABLE [ '[' NUMBER ']' ]
+  uint32_t ctok = *curr_tok;
+
+  if (tokens[ctok++].type == VARIABLE) {
+    if (ctok < tokp && tokens[ctok].type == OPEN_SQUARE_BRACKET) {
+      ctok++;
+      if (ctok < tokp && tokens[ctok].type == NUMBER) {
+        ctok++;
+        if (ctok < tokp && tokens[ctok].type == CLOSED_SQUARE_BRACKET) {
+          ctok++;
+        } else {
+          return rFAILURE;
+        }
+      } else {
+        return rFAILURE;
+      }
+    }
+  } else {
+    return rFAILURE;
+  }
+
+  //
+  *curr_tok = ctok;
+  return rSUCCESS;
 }
 
 static int VarIsType(uint32_t *curr_tok, int *type)

@@ -27,7 +27,7 @@
 #define rEOF            2
 
 // Debug enable (1) or disable (0)
-#define DEBUG           0
+#define DEBUG           1
 
 // Keyword Enums
 typedef enum {
@@ -45,6 +45,8 @@ typedef enum {
   OPERATOR,
   PLUS,
   COMMA,
+  OPEN_SQUARE_BRACKET,
+  CLOSED_SQUARE_BRACKET,
   IDENTIFIER,
   VARIABLE,
   LABEL,
