@@ -16,6 +16,9 @@ char debug_buf[128];
 #define DEBUG_PRINTBUF()
 #endif
 
+#define THROW_ERROR(msg, col_num) \
+  do { sprintf(error_message, msg); col_count = col_num; } while (0);
+
 #define CONSOLE_PRINTF(fmt, ...) \
   do { printf(fmt, ##__VA_ARGS__); } while (0);
 
@@ -63,20 +66,26 @@ const char *keywords[] = {
   "THEN",
   "ELSE",
   "END",
+  "MEMPEEK",
   ""
 };
 
-const char single_char_operators[] = "()=+-*/:&|!,";
+const char single_char_operators[] = "()[]=+-*/:&|!,";
 const char double_char_operators[] = "==&&||";
 
 /* Private Function Prototypes ---------------------------------------------- */
 static int LexAnalyzeLine(void);
 static int ParseGetKeyword(uint32_t token_idx);
+static int ParseTokToNumber(uint32_t token_idx);
 static int StatementPrint(uint32_t curr_tok);
 static int StatementVar(uint32_t curr_tok);
+static int StatementMempeek(uint32_t curr_tok);
 static int VarIsList(uint32_t *curr_tok);
 static int VarIsDeclaration(uint32_t *curr_tok);
 static int VarIsType(uint32_t *curr_tok, int *type);
+static int32_t ConvertHexNumber(int idx1, int idx2);
+static int32_t ConvertBinNumber(int idx1, int idx2);
+static int32_t ConvertDecNumber(int idx1, int idx2);
 
 #if DEBUG >= 1
 static void debug_print_type(token_type_t type);
@@ -132,8 +141,7 @@ int BasicInterpret(FILE *f)
 
     // 
     if (linebuf_idx == LINEBUF_LEN && ch != '\n') {
-      col_count = LINEBUF_LEN;
-      sprintf(error_message, "Line length exceed");
+      THROW_ERROR("Line length exceeded", LINEBUF_LEN);
       return rFAILURE;
     }
 
@@ -173,11 +181,12 @@ int LexIsInteger(int *idx1, int *idx2)
 
   *idx1 = linebuf_idx;
   ch = linebuf[linebuf_idx];
-  ch1 = linebuf[++linebuf_idx];
-  ch2 = linebuf[linebuf_idx + 1];
+  ch1 = linebuf[linebuf_idx + 1];
   if (ch == '0' && (ch1 == 'x' || ch1 == 'X')) {
     // Hex
-    if (LexIsHexDigit(ch2)) {
+    linebuf_idx += 2;
+    ch = linebuf[linebuf_idx];
+    if (LexIsHexDigit(ch)) {
       do {
         ch = linebuf[++linebuf_idx];
       } while (LexIsHexDigit(ch));
@@ -186,7 +195,9 @@ int LexIsInteger(int *idx1, int *idx2)
     }
   } else if (ch == '0' && (ch1 == 'b' || ch1 == 'B')) {
     // Binary
-    if (LexIsBinDigit(ch2)) {
+    linebuf_idx += 2;
+    ch = linebuf[linebuf_idx];
+    if (LexIsBinDigit(ch)) {
       do {
         ch = linebuf[++linebuf_idx];
       } while (LexIsBinDigit(ch));
@@ -195,9 +206,9 @@ int LexIsInteger(int *idx1, int *idx2)
     }
   } else if (LexIsDigit(ch)) {
     // Decimal
-    while (LexIsDigit(ch)) {
+    do {
       ch = linebuf[++linebuf_idx];
-    }
+    } while (LexIsDigit(ch));
   } else {
     return 0;
   }
@@ -424,6 +435,9 @@ int ParseLine(void)
       case VAR:
         result = StatementVar(curr_tok);
         break;
+
+      case MEMPEEK:
+        result = StatementMempeek(curr_tok);
       default:
         break;
     }
@@ -468,8 +482,7 @@ static int LexAnalyzeLine(void)
         // Make sure string is properly terminated
         ch = linebuf[linebuf_idx++];
         if (LexIsEndOfLine(ch)) {
-          col_count = linebuf_idx;
-          sprintf(error_message, "Invalid string");
+          THROW_ERROR("Invalid string", linebuf_idx);
           return rFAILURE;
         }
       } while (linebuf[linebuf_idx] != '"');
@@ -554,8 +567,7 @@ static int LexAnalyzeLine(void)
       return rSUCCESS;
     } else {
       // Error: unrecognized token
-      col_count = linebuf_idx;
-      sprintf(error_message, "Invalid token");
+      THROW_ERROR("Invalid token", linebuf_idx);
       return rFAILURE;
     }
   }
@@ -586,7 +598,31 @@ static int ParseGetKeyword(uint32_t token_idx)
     }
   }
 
+  if (keywords[i] == NULL) {
+    return -1;
+  }
+
   return i;
+}
+
+// TODO
+static int ParseTokToNumber(uint32_t token_idx)
+{
+  char ch1, ch2;
+  int idx1 = tokens[token_idx].idx1, idx2 = tokens[token_idx].idx2;
+  int32_t result;
+
+  ch1 = linebuf[idx1];
+  ch2 = linebuf[idx1 + 1];
+  if ((ch1 == '0') && ((ch2 == 'x') || (ch2 == 'X'))) {
+    result = ConvertHexNumber(idx1 + 2, idx2);
+  } else if (ch1 == '0' && ((ch2 == 'b') || (ch2 == 'B'))) {
+    result = ConvertBinNumber(idx1 + 2, idx2);
+  } else {
+    result = ConvertDecNumber(idx1, idx2);
+  }
+
+  return result;
 }
 
 static int StatementPrint(uint32_t curr_tok)
@@ -608,17 +644,20 @@ static int StatementPrint(uint32_t curr_tok)
           if (curr_tok + 1 < tokp) {
             curr_tok++;
           } else {
-            sprintf(error_message, "Invalid syntax: Missing token.");
+            THROW_ERROR("Invalid syntax: Missing token",
+                        tokens[curr_tok].idx1 + 1);
             return rFAILURE;
           }
         } else if (curr_tok == tokp) {
           break;
         } else {
-          sprintf(error_message, "Invalid syntax: '+' missing?");
+          THROW_ERROR("Invalid syntax: '+' missing?",
+                      tokens[curr_tok].idx1);
           return rFAILURE;
         }
       } else {
-        sprintf(error_message, "Invalid syntax: Bad token.");
+        THROW_ERROR("Invalid syntax: Bad token.",
+                    tokens[curr_tok].idx1 + 1);
         return rFAILURE;
       }
     }
@@ -635,7 +674,7 @@ static int StatementVar(uint32_t curr_tok)
   // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
   // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
   int var_type;
-  int v, temp, size_in_bytes;
+  int v, temp, size_in_bytes, array_size;
   if (curr_tok < tokp) {
     // Check VAR_LIST
     if (VarIsList(&curr_tok) == rSUCCESS) {
@@ -660,17 +699,19 @@ static int StatementVar(uint32_t curr_tok)
         // Throw an error if they already do!
         for (curr_tok = 0; curr_tok < tokp; curr_tok++) {
           if (tokens[curr_tok].type == VARIABLE) {
+#if 0
             memcpy(debug_buf, linebuf + tokens[curr_tok].idx1,
                    tokens[curr_tok].idx2 - tokens[curr_tok].idx1);
             debug_buf[tokens[curr_tok].idx2 - tokens[curr_tok].idx1] = 0;
             DEBUG_PRINTBUF();
+#endif
 
             // Make sure it doesn't exist.
             for (v = 0; v < varp; v++) {
               if (memcmp(linebuf + tokens[curr_tok].idx1, var_list[v].name,
                   tokens[curr_tok].idx2 - tokens[curr_tok].idx1) == 0) {
-                sprintf(error_message, "Variable already defined");
-                col_count = tokens[curr_tok].idx1 + 1;
+                THROW_ERROR("Variable already defined",
+                            tokens[curr_tok].idx1 + 1);
                 return rFAILURE;
               }
             }
@@ -683,7 +724,12 @@ static int StatementVar(uint32_t curr_tok)
             //  i) Save location on stack to idx
             var_list[varp].idx = sp;
             //  ii) Update stack based on variable size
-            sp += size_in_bytes;
+            if (curr_tok + 3 < tokp && tokens[curr_tok + 2].type == NUMBER) {
+              array_size = ParseTokToNumber(curr_tok + 2);
+              sp += size_in_bytes * array_size;
+            } else {
+              sp += size_in_bytes;
+            }
             // 3. Save the var_type and size_in_bytes
             var_list[varp].var_type = var_type;
             var_list[varp].size_in_bytes = size_in_bytes;
@@ -703,6 +749,28 @@ static int StatementVar(uint32_t curr_tok)
   return rSUCCESS;
 }
 
+static int StatementMempeek(uint32_t curr_tok)
+{
+  // MEMPEEK Syntax
+  // MEMPEEK :== 'MEMPEEK'
+  int i;
+  if (curr_tok < tokp) {
+    THROW_ERROR("Invalid syntax; Usage: MEMPEEK", tokens[curr_tok].idx1 + 1);
+    return rFAILURE;
+  }
+
+  // Show stack, var_list info.
+  CONSOLE_PRINTF("Stack Size: %d\n", sp);
+  for (i = 0; i < sp; i++) {
+    CONSOLE_PRINTF("stack[%d] = %d\n", i, stack[i]);
+  }
+  CONSOLE_PRINTF("Var List Size: %d\n", varp);
+  for (i = 0; i < varp; i++) {
+    CONSOLE_PRINTF("var_list[%d].name = %s\n", i, var_list[i].name);
+  }
+  return rSUCCESS;
+}
+
 static int VarIsList(uint32_t *curr_tok)
 {
   // VAR_LIST :== VAR_DECLARATION {, VAR_DECLARATION}*
@@ -711,6 +779,7 @@ static int VarIsList(uint32_t *curr_tok)
       if ((*curr_tok) < tokp && tokens[*curr_tok].type == COMMA) {
         (*curr_tok)++;
         if ((*curr_tok) >= tokp) {
+          THROW_ERROR("Missing VARIABLE token", tokens[*curr_tok - 1].idx2 + 1);
           return rFAILURE;
         }
       } else {
@@ -744,6 +813,7 @@ static int VarIsDeclaration(uint32_t *curr_tok)
       }
     }
   } else {
+    THROW_ERROR("Invalid VARIABLE token", tokens[*curr_tok].idx1 + 1);
     return rFAILURE;
   }
 
@@ -773,6 +843,21 @@ static int VarIsType(uint32_t *curr_tok, int *type)
   return rSUCCESS;
 }
 
+static int32_t ConvertHexNumber(int idx1, int idx2)
+{
+  return 1;
+}
+
+static int32_t ConvertBinNumber(int idx1, int idx2)
+{
+  return 1;
+}
+
+static int32_t ConvertDecNumber(int idx1, int idx2)
+{
+  return 1;
+}
+
 #if DEBUG >= 1
 static void debug_print_type(token_type_t type)
 {
@@ -791,6 +876,12 @@ static void debug_print_type(token_type_t type)
       break;
     case COMMA:
       printf("Comma");
+      break;
+    case OPEN_SQUARE_BRACKET:
+      printf("Open Square Bracket");
+      break;
+    case CLOSED_SQUARE_BRACKET:
+      printf("Closed Square Bracket");
       break;
     case IDENTIFIER:
       printf("Identifier");

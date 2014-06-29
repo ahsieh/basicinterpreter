@@ -33,7 +33,13 @@ typedef enum {
   PRINT,
   VAR,
   INT8,
-  UINT8
+  UINT8,
+  IF,
+  THEN,
+  ELSE,
+  END,
+  // Debug keywords
+  MEMPEEK
 } keyword_t;
 
 // Token Enums

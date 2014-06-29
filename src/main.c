@@ -68,7 +68,7 @@ static void PrintErrorMessage(void)
   for (i = 0; i < LexGetCurrentColumnCount() - 1; i++) {
     printf(" ");
   }
-  puts("^");
+  printf("^ ");
   puts(LexGetErrorMessage());
 }
 
