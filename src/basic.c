@@ -107,12 +107,15 @@ static int ParseGetKeyword(uint32_t token_idx);
 static int ParseTokToNumber(uint32_t token_idx);
 static int StatementPrint(uint32_t curr_tok);
 static int StatementVar(uint32_t curr_tok);
+static int StatementAssignment(uint32_t curr_tok);
 static int StatementExpression(uint32_t curr_tok);
 static int StatementMempeek(uint32_t curr_tok);
 static int VarIsList(uint32_t *curr_tok);
 static int VarIsDeclaration(uint32_t *curr_tok);
 static int VarIsType(uint32_t *curr_tok, int *type);
 static int VarLocation(uint32_t curr_tok);
+static int ExprIsTerm(uint32_t *curr_tok);
+static int ExprIsFactor(uint32_t *curr_tok);
 static int32_t ConvertHexNumber(int idx1, int idx2);
 static int32_t ConvertBinNumber(int idx1, int idx2);
 static int32_t ConvertDecNumber(int idx1, int idx2);
@@ -457,7 +460,10 @@ int ParseLine(void)
   int result = rSUCCESS;
   uint32_t curr_tok = 0;
 
-  if (tokens[curr_tok].type == KEYWORD) {
+  if (tokp == 0) {
+    // No need to do anything, we accept these.
+puts("hello");
+  } else if (tokens[curr_tok].type == KEYWORD) {
     //
     switch (ParseGetKeyword(curr_tok++)) {
       case PRINT:
@@ -473,7 +479,14 @@ int ParseLine(void)
         break;
     }
   } else {
-    result = StatementExpression(curr_tok);
+    if ((result = StatementAssignment(curr_tok)) == rSUCCESS) {
+      
+    }
+/*
+    else if ((result = StatementExpression(curr_tok)) == rSUCCESS) {
+        
+    }
+*/
   }
 
   return result;
@@ -870,16 +883,63 @@ static int StatementVar(uint32_t curr_tok)
   return rSUCCESS;
 }
 
+static int StatementAssignment(uint32_t curr_tok)
+{
+  // ASSIGNMENT Syntax
+  // ASSIGNMENT :== { VARIABLE '=' } EXPRESSION
+  if (curr_tok < tokp) {
+    do {
+      if (tokens[curr_tok].type == VARIABLE) {
+        curr_tok++;
+        if (curr_tok < tokp && tokens[curr_tok].type == EQUALS) {
+          curr_tok++;
+          if (curr_tok >= tokp) {
+            THROW_ERROR("Missing expression", tokens[curr_tok - 1].idx2 + 1);
+            return rFAILURE;
+          }
+        } else {
+          curr_tok--;
+          break;
+        }
+      } else {
+        THROW_ERROR("Expecting type VARIABLE", tokens[curr_tok].idx1);
+        return rFAILURE;
+      }
+    } while (tokens[curr_tok].type == VARIABLE);
+  } else {
+    return rFAILURE;
+  }
+
+  // Check EXPRESSION
+  return rSUCCESS;
+  return StatementExpression(curr_tok);
+}
+
 static int StatementExpression(uint32_t curr_tok)
 {
   // EXPRESSION Syntax
-  // EXPRESSION :== TERM | TERM { [+,-] TERM }
-  // TERM :== FACTOR | FACTOR { [*,/] FACTOR }
-  // FACTOR :== NUMBER | '(' EXPRESSION ')'
+  // EXPRESSION :== TERM | TERM { [+,-,&,|] TERM }
+  // TERM       :== FACTOR | FACTOR { [*,/] FACTOR }
+  // FACTOR     :== NUMBER | VARIABLE | '(' EXPRESSION ')'
   
-#if 0
-  // TODO
-  
+#if 1
+  if (curr_tok < tokp) {
+    // Check TERM(s)
+    do {
+      if (ExprIsTerm(&curr_tok) == rSUCCESS) {
+        // Check [+,-] TERM
+        if (curr_tok < tokp) {
+          if (!(tokens[curr_tok].type == PLUS || tokens[curr_tok].type == MINUS)) {
+            return rFAILURE;
+          }
+        }
+      } else {
+        return rFAILURE; 
+      }
+    } while (curr_tok < tokp);
+  } else {
+    return rFAILURE;
+  }
 #else
   // HACK FOR TESTING
   if (curr_tok + 2 >= tokp) {
@@ -1041,6 +1101,30 @@ static int VarLocation(uint32_t curr_tok)
   }
  
   return -1;
+}
+
+static int ExprIsTerm(uint32_t *curr_tok)
+{
+  // TERM :== FACTOR | FACTOR { [*,/] FACTOR }
+  if (*curr_tok < tokp) {
+    do {
+      if (ExprIsFactor(curr_tok) == rSUCCESS) {
+        // Check [*,/] FACTOR
+        if (*curr_tok < tokp) {
+          
+        }
+      } else {
+        return rFAILURE;
+      }
+    } while (*curr_tok < tokp);
+  }
+  return rSUCCESS;
+}
+
+static int ExprIsFactor(uint32_t *curr_tok)
+{
+  // FACTOR :== NUMBER | '(' EXPRESSION ')'
+  return rSUCCESS;
 }
 
 static int32_t ConvertHexNumber(int idx1, int idx2)
