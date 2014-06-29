@@ -726,13 +726,13 @@ static int StatementVar(uint32_t curr_tok)
             //  ii) Update stack based on variable size
             if (curr_tok + 3 < tokp && tokens[curr_tok + 2].type == NUMBER) {
               array_size = ParseTokToNumber(curr_tok + 2);
-              sp += size_in_bytes * array_size;
             } else {
-              sp += size_in_bytes;
+              array_size = 1;
             }
+            sp += size_in_bytes * array_size;
             // 3. Save the var_type and size_in_bytes
             var_list[varp].var_type = var_type;
-            var_list[varp].size_in_bytes = size_in_bytes;
+            var_list[varp].size_in_bytes = size_in_bytes * array_size;
             varp++;
           }
         }
@@ -767,6 +767,8 @@ static int StatementMempeek(uint32_t curr_tok)
   CONSOLE_PRINTF("Var List Size: %d\n", varp);
   for (i = 0; i < varp; i++) {
     CONSOLE_PRINTF("var_list[%d].name = %s\n", i, var_list[i].name);
+    CONSOLE_PRINTF("var_list[%d].size = %u\n", i, var_list[i].size_in_bytes);
+    CONSOLE_PRINTF("var_list[%d].idx = %u\n", i, var_list[i].idx);
   }
   return rSUCCESS;
 }
@@ -855,7 +857,14 @@ static int32_t ConvertBinNumber(int idx1, int idx2)
 
 static int32_t ConvertDecNumber(int idx1, int idx2)
 {
-  return 1;
+  int result = 0;
+  int mult = 1;
+  while (idx2-- != idx1) {
+    result += (linebuf[idx2] - '0') * mult;
+    mult *= 10;
+  }
+
+  return result;
 }
 
 #if DEBUG >= 1
