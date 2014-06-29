@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 /* Defines ------------------------------------------------------------------ */
-#define LINEBUF_LEN           512
-#define STACK_SIZE            512
+#define LINEBUF_LEN           512 // Bytes
+#define STACK_SIZE            512 // Bytes
 // Variables limitations
 #define MAX_VAR_COUNT         512
 #define VAR_NAME_LEN          64
@@ -14,8 +14,7 @@
 #define MAX_LABEL_COUNT       64
 #define LABEL_NAME_LEN        64
 // Tokens limitations
-#define MAX_TOK_COUNT         32
-#define TOK_NAME_LEN          64
+#define MAX_TOK_COUNT         128 
 // Parser limitations
 #define NUM_PARSE_TREE_NODES  128
 // Console definitions
@@ -54,8 +53,10 @@ typedef enum {
 
 // Variable data structure
 typedef struct {
-  char      name[VAR_NAME_LEN];
-  uint32_t  value;
+  char          name[VAR_NAME_LEN];
+  uint16_t      idx;
+  uint16_t      size_in_bytes;
+  int           var_type;
 } var_t;
 
 // Token data structure

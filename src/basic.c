@@ -10,8 +10,10 @@
 char debug_buf[128];
 #define DEBUG_PRINTF(fmt, ...) \
   do { sprintf(debug_buf, fmt, ##__VA_ARGS__); puts(debug_buf); } while (0);
+#define DEBUG_PRINTBUF()  puts(debug_buf);
 #else
 #define DEBUG_PRINTF(...)
+#define DEBUG_PRINTBUF()
 #endif
 
 #define CONSOLE_PRINTF(fmt, ...) \
@@ -28,8 +30,8 @@ char debug_buf[128];
 
 /* Local Variables ---------------------------------------------------------- */
 // Lexer buffer
-static uint32_t linebuf_idx = 0;
 static char linebuf[LINEBUF_LEN];
+static uint32_t linebuf_idx = 0;
 // Tokens
 static token_t tokens[MAX_TOK_COUNT];
 static uint32_t tokp = 0;
@@ -37,14 +39,16 @@ static uint32_t tokp = 0;
 static uint32_t line_count = 0, col_count = 0;
 // Error message
 static char error_message[32];
+// Run-Time Stack and Stack Pointer
+static uint8_t stack[STACK_SIZE];
+static uint32_t sp = 0;
+// Run-time Heap (TODO?)
+// ...
+// Variables Tracker and Pointer
+static var_t var_list[MAX_VAR_COUNT];
+static uint32_t varp = 0;
 // Parse tree
 static parser_node_t parse_tree[NUM_PARSE_TREE_NODES];
-/*
-// Run-Time Stack and Stack Pointer
-static uint32_t stack[STACK_SIZE], sp = 0;
-// Variables
-static var_t vars[MAX_VAR_COUNT];
-*/
 // Console output
 static int consolebuf_idx = 0;
 static char consolebuf[CONSOLEBUF_LEN];
@@ -452,15 +456,10 @@ static int LexAnalyzeLine(void)
       break;
     } else if (LexIsDigit(ch) && LexIsInteger(&idx1, &idx2)) {
       // Save token name and type as NUMBER
-      if (idx2 - idx1 > TOK_NAME_LEN) {
-        sprintf(error_message, "Number length exceeds limit.");
-        return rFAILURE;
-      } else {
-        tokens[tokp].idx1 = idx1;
-        tokens[tokp].idx2 = idx2;
-        tokens[tokp].type = NUMBER;
-        tokp++;
-      }
+      tokens[tokp].idx1 = idx1;
+      tokens[tokp].idx2 = idx2;
+      tokens[tokp].type = NUMBER;
+      tokp++;
     } else if (LexIsDoubleQuote(ch)) {
       // TODO Change where we store STRING literals.
       // Check for string literals
@@ -531,31 +530,26 @@ static int LexAnalyzeLine(void)
       }
       idx2 = linebuf_idx;
 
-      if (idx2 - idx1 > TOK_NAME_LEN) {
-        sprintf(error_message, "Token length exceeds limit.");
-        return rFAILURE;
-      } else {
-        // Save token name 
-        tokens[tokp].idx1 = idx1;
-        tokens[tokp].idx2 = idx2;
+      // Save token name 
+      tokens[tokp].idx1 = idx1;
+      tokens[tokp].idx2 = idx2;
 
-        // Determine if they are keywords, labels, or variables
-        if (LexIsKeyword(tokens[tokp].idx1, tokens[tokp].idx2)) {
-          // Keyword
-          tokens[tokp].type = KEYWORD;
+      // Determine if they are keywords, labels, or variables
+      if (LexIsKeyword(tokens[tokp].idx1, tokens[tokp].idx2)) {
+        // Keyword
+        tokens[tokp].type = KEYWORD;
+      } else {
+        // Check if we have a label
+        if (linebuf[linebuf_idx] == ':') {
+          // Label
+          tokens[tokp].type = LABEL;
+          linebuf_idx++;
         } else {
-          // Check if we have a label
-          if (linebuf[linebuf_idx] == ':') {
-            // Label
-            tokens[tokp].type = LABEL;
-            linebuf_idx++;
-          } else {
-            // Variable
-            tokens[tokp].type = VARIABLE;
-          }
+          // Variable
+          tokens[tokp].type = VARIABLE;
         }
-        tokp++;
       }
+      tokp++;
     } else if (LexIsEOF(ch)) {
       return rSUCCESS;
     } else {
@@ -641,6 +635,7 @@ static int StatementVar(uint32_t curr_tok)
   // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
   // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
   int var_type;
+  int v, temp, size_in_bytes;
   if (curr_tok < tokp) {
     // Check VAR_LIST
     if (VarIsList(&curr_tok) == rSUCCESS) {
@@ -652,11 +647,48 @@ static int StatementVar(uint32_t curr_tok)
 
         // Once we have a valid statement, we must interpret it properly.
         // TODO
-        DEBUG_PRINTF("We have a valid variable statement!");
         switch (var_type) {
-          case INT8: DEBUG_PRINTF("INT8"); break;
-          case UINT8: DEBUG_PRINTF("UINT8"); break;
+          case INT8:
+          case UINT8:
+            size_in_bytes = 1;
+            break;
           default: break;
+        }
+
+        // Go through all the VARIABLE tokens and see if they
+        // need to be added to the stack (if they don't exist).
+        // Throw an error if they already do!
+        for (curr_tok = 0; curr_tok < tokp; curr_tok++) {
+          if (tokens[curr_tok].type == VARIABLE) {
+            memcpy(debug_buf, linebuf + tokens[curr_tok].idx1,
+                   tokens[curr_tok].idx2 - tokens[curr_tok].idx1);
+            debug_buf[tokens[curr_tok].idx2 - tokens[curr_tok].idx1] = 0;
+            DEBUG_PRINTBUF();
+
+            // Make sure it doesn't exist.
+            for (v = 0; v < varp; v++) {
+              if (memcmp(linebuf + tokens[curr_tok].idx1, var_list[v].name,
+                  tokens[curr_tok].idx2 - tokens[curr_tok].idx1) == 0) {
+                sprintf(error_message, "Variable already defined");
+                col_count = tokens[curr_tok].idx1 + 1;
+                return rFAILURE;
+              }
+            }
+
+            // Add it!
+            // 1. Save the name
+            temp = tokens[curr_tok].idx2 - tokens[curr_tok].idx1;
+            memcpy(var_list[varp].name, linebuf + tokens[curr_tok].idx1, temp);
+            // 2. Add to the stack
+            //  i) Save location on stack to idx
+            var_list[varp].idx = sp;
+            //  ii) Update stack based on variable size
+            sp += size_in_bytes;
+            // 3. Save the var_type and size_in_bytes
+            var_list[varp].var_type = var_type;
+            var_list[varp].size_in_bytes = size_in_bytes;
+            varp++;
+          }
         }
       } else {
         return rFAILURE;
