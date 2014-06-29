@@ -34,16 +34,14 @@ char debug_buf[128];
     consolebuf_idx += s.idx2 - s.idx1; \
   } while (0);
 
-#define CONSOLE_ADD_UNSIGNED_TOK(t, v) \
+#define CONSOLE_ADD_UNSIGNED_TOK(v) \
   do { \
-    sprintf(consolebuf + consolebuf_idx, "%u", (v)); \
-    consolebuf_idx += t.idx2 - t.idx1; \
+    consolebuf_idx += sprintf(consolebuf + consolebuf_idx, "%u", (v)); \
   } while (0);
       
-#define CONSOLE_ADD_SIGNED_TOK(t, v) \
+#define CONSOLE_ADD_SIGNED_TOK(v) \
   do { \
-    sprintf(consolebuf + consolebuf_idx, "%d", (v)); \
-    consolebuf_idx += t.idx2 - t.idx1; \
+    consolebuf_idx += sprintf(consolebuf + consolebuf_idx, "%d", (v)); \
   } while (0);
       
 #define CONSOLE_ADD_CHAR_TOK(t, v) \
@@ -104,6 +102,7 @@ static int ParseGetKeyword(uint32_t token_idx);
 static int ParseTokToNumber(uint32_t token_idx);
 static int StatementPrint(uint32_t curr_tok);
 static int StatementVar(uint32_t curr_tok);
+static int StatementExpression(uint32_t curr_tok);
 static int StatementMempeek(uint32_t curr_tok);
 static int VarIsList(uint32_t *curr_tok);
 static int VarIsDeclaration(uint32_t *curr_tok);
@@ -469,8 +468,7 @@ int ParseLine(void)
         break;
     }
   } else {
-    // TODO Update error message
-    //return rFAILURE;
+    result = StatementExpression(curr_tok);
   }
 
   return result;
@@ -543,6 +541,12 @@ static int LexAnalyzeLine(void)
         switch (ch) {
           case '+':
             tokens[tokp].type = PLUS;
+            break;
+          case '-':
+            tokens[tokp].type = MINUS;
+            break;
+          case '=':
+            tokens[tokp].type = EQUALS;
             break;
           case ',':
             tokens[tokp].type = COMMA;
@@ -675,7 +679,7 @@ static int StatementPrint(uint32_t curr_tok)
               case INT8:
                 do {
                   vval = stack[var_list[vloc].idx];
-                  CONSOLE_ADD_SIGNED_TOK(tokens[curr_tok], (int8_t)vval);
+                  CONSOLE_ADD_SIGNED_TOK((int8_t)vval);
                   if (i > 1) {
                     CONSOLE_ADD_STRING(", ");
                   }
@@ -684,7 +688,7 @@ static int StatementPrint(uint32_t curr_tok)
               case UINT8:
                 do {
                   vval = stack[var_list[vloc].idx];
-                  CONSOLE_ADD_UNSIGNED_TOK(tokens[curr_tok], (uint8_t)vval);
+                  CONSOLE_ADD_UNSIGNED_TOK((uint8_t)vval);
                   if (i > 1) {
                     CONSOLE_ADD_STRING(", ");
                   }
@@ -795,6 +799,42 @@ static int StatementVar(uint32_t curr_tok)
   } else {
     return rFAILURE;
   }
+
+  return rSUCCESS;
+}
+
+static int StatementExpression(uint32_t curr_tok)
+{
+  // EXPRESSION Syntax
+  // EXPRESSION :== TERM | TERM { [+,-] TERM }
+  // TERM :== FACTOR | FACTOR { [*,/] FACTOR }
+  // FACTOR :== NUMBER | '(' EXPRESSION ')'
+  
+  // HACK FOR TESTING
+  if (curr_tok + 2 >= tokp) {
+    return rFAILURE;
+  }
+
+  int vloc;
+  token_t tok1, tok2, tok3;
+  tok1 = tokens[curr_tok];
+  tok2 = tokens[curr_tok + 1];
+  tok3 = tokens[curr_tok + 2];
+  if (tok1.type != VARIABLE) {
+    return rFAILURE;
+  }
+  if (tok2.type != EQUALS) {
+    return rFAILURE;
+  }
+  if (tok3.type != NUMBER) {
+    return rFAILURE;
+  }
+
+  if ((vloc = VarLocation(curr_tok)) < 0) {
+    return rFAILURE;
+  }
+
+  stack[var_list[vloc].idx] = ParseTokToNumber(curr_tok + 2);
 
   return rSUCCESS;
 }
@@ -913,7 +953,7 @@ static int32_t ConvertHexNumber(int idx1, int idx2)
   int result = 0;
   int shift_amt = 0;
   while (idx2-- != idx1) {
-    result += GetHexValue(linebuf[idx2]);
+    result += GetHexValue(linebuf[idx2]) << shift_amt;
     shift_amt += 4;
   }
   return result;
@@ -970,6 +1010,12 @@ static void debug_print_type(token_type_t type)
       break;
     case PLUS:
       printf("Plus");
+      break;
+    case MINUS:
+      printf("Minus");
+      break;
+    case EQUALS:
+      printf("Equals");
       break;
     case COMMA:
       printf("Comma");
