@@ -86,6 +86,7 @@ static int VarIsType(uint32_t *curr_tok, int *type);
 static int32_t ConvertHexNumber(int idx1, int idx2);
 static int32_t ConvertBinNumber(int idx1, int idx2);
 static int32_t ConvertDecNumber(int idx1, int idx2);
+static int32_t GetHexValue(char ch);
 
 #if DEBUG >= 1
 static void debug_print_type(token_type_t type);
@@ -177,7 +178,7 @@ int BasicInterpret(FILE *f)
  */
 int LexIsInteger(int *idx1, int *idx2)
 {
-  char ch, ch1, ch2;
+  char ch, ch1;
 
   *idx1 = linebuf_idx;
   ch = linebuf[linebuf_idx];
@@ -847,12 +848,24 @@ static int VarIsType(uint32_t *curr_tok, int *type)
 
 static int32_t ConvertHexNumber(int idx1, int idx2)
 {
-  return 1;
+  int result = 0;
+  int shift_amt = 0;
+  while (idx2-- != idx1) {
+    result += GetHexValue(linebuf[idx2]);
+    shift_amt += 4;
+  }
+  return result;
 }
 
 static int32_t ConvertBinNumber(int idx1, int idx2)
 {
-  return 1;
+  int result = 0;
+  int shift_amt = 0;
+  while (idx2-- != idx1) {
+    result += (linebuf[idx2] - '0') << shift_amt;
+    shift_amt++;
+  }
+  return result;
 }
 
 static int32_t ConvertDecNumber(int idx1, int idx2)
@@ -865,6 +878,19 @@ static int32_t ConvertDecNumber(int idx1, int idx2)
   }
 
   return result;
+}
+
+static int32_t GetHexValue(char ch)
+{
+  if (LexIsDigit(ch)) {
+    return ch - '0';
+  } else {
+    if ('A' <= ch && ch <= 'F') {
+      return ch - 'A' + 10;
+    } else {
+      return ch - 'a' + 10;
+    }
+  }
 }
 
 #if DEBUG >= 1
