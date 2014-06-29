@@ -20,6 +20,10 @@
 // Console definitions
 #define CONSOLEBUF_LEN        LINEBUF_LEN
 
+// Sizes (in bytes) for Variable Types
+#define SIZEOF_INT8           1
+#define SIZEOF_UINT8          1
+
 // Return types
 #define rSUCCESS        0
 #define rFAILURE        1

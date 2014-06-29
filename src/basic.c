@@ -17,14 +17,38 @@ char debug_buf[128];
 #endif
 
 #define THROW_ERROR(msg, col_num) \
-  do { sprintf(error_message, msg); col_count = col_num; } while (0);
+  do { strcpy(error_message, msg); col_count = col_num; } while (0);
 
 #define CONSOLE_PRINTF(fmt, ...) \
   do { printf(fmt, ##__VA_ARGS__); } while (0);
 
-#define CONSOLE_ADD(t) \
+#define CONSOLE_ADD_STRING(str) \
   do { \
-    memcpy(consolebuf + consolebuf_idx, linebuf + t.idx1, t.idx2 - t.idx1); \
+    strcpy(consolebuf + consolebuf_idx, str); \
+    consolebuf_idx += strlen(str); \
+  } while (0);
+
+#define CONSOLE_ADD_STRING_TOK(s) \
+  do { \
+    memcpy(consolebuf + consolebuf_idx, linebuf + s.idx1, s.idx2 - s.idx1); \
+    consolebuf_idx += s.idx2 - s.idx1; \
+  } while (0);
+
+#define CONSOLE_ADD_UNSIGNED_TOK(t, v) \
+  do { \
+    sprintf(consolebuf + consolebuf_idx, "%u", (v)); \
+    consolebuf_idx += t.idx2 - t.idx1; \
+  } while (0);
+      
+#define CONSOLE_ADD_SIGNED_TOK(t, v) \
+  do { \
+    sprintf(consolebuf + consolebuf_idx, "%d", (v)); \
+    consolebuf_idx += t.idx2 - t.idx1; \
+  } while (0);
+      
+#define CONSOLE_ADD_CHAR_TOK(t, v) \
+  do { \
+    sprintf(consolebuf + consolebuf_idx, "%c", (v)); \
     consolebuf_idx += t.idx2 - t.idx1; \
   } while (0);
       
@@ -50,6 +74,7 @@ static uint32_t sp = 0;
 // Variables Tracker and Pointer
 static var_t var_list[MAX_VAR_COUNT];
 static uint32_t varp = 0;
+static uint32_t var_val = 0;
 // Parse tree
 static parser_node_t parse_tree[NUM_PARSE_TREE_NODES];
 // Console output
@@ -83,6 +108,7 @@ static int StatementMempeek(uint32_t curr_tok);
 static int VarIsList(uint32_t *curr_tok);
 static int VarIsDeclaration(uint32_t *curr_tok);
 static int VarIsType(uint32_t *curr_tok, int *type);
+static int VarLocation(uint32_t curr_tok);
 static int32_t ConvertHexNumber(int idx1, int idx2);
 static int32_t ConvertBinNumber(int idx1, int idx2);
 static int32_t ConvertDecNumber(int idx1, int idx2);
@@ -631,6 +657,8 @@ static int StatementPrint(uint32_t curr_tok)
   // PRINT Syntax
   // PRINT      :== 'PRINT' [PRINT_OBJ] { '+' PRINT_OBJ }*
   // PRINT_OBJ  :== STRING | VARIABLE
+  int i, vloc;
+  uint32_t vval;
   consolebuf_idx = 0;
   memset(consolebuf, 0, CONSOLEBUF_LEN);
 
@@ -638,7 +666,38 @@ static int StatementPrint(uint32_t curr_tok)
     while (curr_tok < tokp) {
       if (tokens[curr_tok].type == STRING || 
           tokens[curr_tok].type == VARIABLE) {
-        CONSOLE_ADD(tokens[curr_tok]);
+        if (tokens[curr_tok].type == STRING) {
+          CONSOLE_ADD_STRING_TOK(tokens[curr_tok]);
+        } else {
+          if ((vloc = VarLocation(curr_tok)) >= 0) {
+            i = var_list[vloc].size_in_bytes;
+            switch (var_list[vloc].var_type) {
+              case INT8:
+                do {
+                  vval = stack[var_list[vloc].idx];
+                  CONSOLE_ADD_SIGNED_TOK(tokens[curr_tok], (int8_t)vval);
+                  if (i > 1) {
+                    CONSOLE_ADD_STRING(", ");
+                  }
+                } while (--i);
+                break;
+              case UINT8:
+                do {
+                  vval = stack[var_list[vloc].idx];
+                  CONSOLE_ADD_UNSIGNED_TOK(tokens[curr_tok], (uint8_t)vval);
+                  if (i > 1) {
+                    CONSOLE_ADD_STRING(", ");
+                  }
+                } while (--i);
+                break;
+              default:
+                break;
+            }
+          } else {
+            THROW_ERROR("Undefined variable.", tokens[curr_tok].idx1 + 1);
+            return rFAILURE;
+          }
+        }
         curr_tok++;
 
         if (curr_tok < tokp && (tokens[curr_tok].type == PLUS)) {
@@ -675,7 +734,7 @@ static int StatementVar(uint32_t curr_tok)
   // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
   // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
   int var_type;
-  int v, temp, size_in_bytes, array_size;
+  int temp, size_in_bytes, array_size;
   if (curr_tok < tokp) {
     // Check VAR_LIST
     if (VarIsList(&curr_tok) == rSUCCESS) {
@@ -700,21 +759,11 @@ static int StatementVar(uint32_t curr_tok)
         // Throw an error if they already do!
         for (curr_tok = 0; curr_tok < tokp; curr_tok++) {
           if (tokens[curr_tok].type == VARIABLE) {
-#if 0
-            memcpy(debug_buf, linebuf + tokens[curr_tok].idx1,
-                   tokens[curr_tok].idx2 - tokens[curr_tok].idx1);
-            debug_buf[tokens[curr_tok].idx2 - tokens[curr_tok].idx1] = 0;
-            DEBUG_PRINTBUF();
-#endif
-
             // Make sure it doesn't exist.
-            for (v = 0; v < varp; v++) {
-              if (memcmp(linebuf + tokens[curr_tok].idx1, var_list[v].name,
-                  tokens[curr_tok].idx2 - tokens[curr_tok].idx1) == 0) {
-                THROW_ERROR("Variable already defined",
-                            tokens[curr_tok].idx1 + 1);
-                return rFAILURE;
-              }
+            if (VarLocation(curr_tok) >= 0) {
+              THROW_ERROR("Variable already defined",
+                          tokens[curr_tok].idx1 + 1);
+              return rFAILURE;
             }
 
             // Add it!
@@ -844,6 +893,19 @@ static int VarIsType(uint32_t *curr_tok, int *type)
 
   (*curr_tok)++;
   return rSUCCESS;
+}
+
+static int VarLocation(uint32_t curr_tok)
+{
+  int v;
+  for (v = 0; v < varp; v++) {
+    if (memcmp(linebuf + tokens[curr_tok].idx1, var_list[v].name,
+        tokens[curr_tok].idx2 - tokens[curr_tok].idx1) == 0) {
+      return v;
+    }
+  }
+ 
+  return -1;
 }
 
 static int32_t ConvertHexNumber(int idx1, int idx2)
