@@ -21,8 +21,22 @@
 #define CONSOLEBUF_LEN        LINEBUF_LEN
 
 // Sizes (in bytes) for Variable Types
+#define SIZEOF_PTR            4
+#define SIZEOF_CHAR           SIZEOF_UINT8
 #define SIZEOF_INT8           1
 #define SIZEOF_UINT8          1
+#define SIZEOF_INT16          2
+#define SIZEOF_UINT16         2
+#define SIZEOF_INT32          4
+#define SIZEOF_UINT32         4
+#define SIZEOF_CHARPTR        SIZEOF_PTR
+#define SIZEOF_INT8PTR        SIZEOF_PTR
+#define SIZEOF_UINT8PTR       SIZEOF_PTR
+#define SIZEOF_INT16PTR       SIZEOF_PTR
+#define SIZEOF_UINT16PTR      SIZEOF_PTR
+#define SIZEOF_INT32PTR       SIZEOF_PTR
+#define SIZEOF_UINT32PTR      SIZEOF_PTR
+#define NUM_DATA_TYPES        7
 
 // Return types
 #define rSUCCESS        0
@@ -36,12 +50,20 @@
 typedef enum {
   PRINT,
   VAR,
+  CHAR,
+  CHARPTR,
   INT8,
   UINT8,
   INT16,
   UINT16,
   INT32,
   UINT32,
+  INT8PTR,
+  UINT8PTR,
+  INT16PTR,
+  UINT16PTR,
+  INT32PTR,
+  UINT32PTR,
   IF,
   THEN,
   ELSE,
@@ -67,12 +89,31 @@ typedef enum {
   LABEL,
 } token_type_t;
 
+typedef enum {
+  VAR_CHAR = 0,
+  VAR_INT8,
+  VAR_UINT8,
+  VAR_INT16,
+  VAR_UINT16,
+  VAR_INT32,
+  VAR_UINT32,
+  VAR_CHARPTR,
+  VAR_INT8PTR,
+  VAR_UINT8PTR,
+  VAR_INT16PTR,
+  VAR_UINT16PTR,
+  VAR_INT32PTR,
+  VAR_UINT32PTR
+} var_type_t;
+
 // Variable data structure
 typedef struct {
   char          name[VAR_NAME_LEN];
-  uint16_t      idx;
+  uint16_t      addr;
   uint16_t      size_in_bytes;
+  uint16_t      len;
   int           var_type;
+  int           sub_var_type;
 } var_t;
 
 // Token data structure

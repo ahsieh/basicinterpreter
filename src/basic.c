@@ -83,12 +83,20 @@ static char consolebuf[CONSOLEBUF_LEN];
 const char *keywords[] = {
   "PRINT",
   "VAR",
+  "CHAR",
+  "CHAR*",
   "INT8",
   "UINT8",
   "INT16",
   "UINT16",
   "INT32",
   "UINT32",
+  "INT8*",
+  "UINT8*",
+  "INT16*",
+  "UINT16*",
+  "INT32*",
+  "UINT32*",
   "IF",
   "THEN",
   "ELSE",
@@ -96,6 +104,22 @@ const char *keywords[] = {
   // Debug keywords
   "MEMPEEK",
   ""
+};
+
+const int var_type_sizes[] = {
+  SIZEOF_CHAR,
+  SIZEOF_INT8,
+  SIZEOF_UINT8,
+  SIZEOF_INT16,
+  SIZEOF_UINT16,
+  SIZEOF_INT32,
+  SIZEOF_UINT32,
+  SIZEOF_INT8PTR,
+  SIZEOF_UINT8PTR,
+  SIZEOF_INT16PTR,
+  SIZEOF_UINT16PTR,
+  SIZEOF_INT32PTR,
+  SIZEOF_UINT32PTR
 };
 
 const char single_char_operators[] = "()[]=+-*/:&|!,";
@@ -462,7 +486,7 @@ int ParseLine(void)
 
   if (tokp == 0) {
     // No need to do anything, we accept these.
-puts("hello");
+    DEBUG_PRINTF("Empty line");
   } else if (tokens[curr_tok].type == KEYWORD) {
     //
     switch (ParseGetKeyword(curr_tok++)) {
@@ -479,10 +503,13 @@ puts("hello");
         break;
     }
   } else {
+    result = StatementExpression(curr_tok);
+/*
     if ((result = StatementAssignment(curr_tok)) == rSUCCESS) {
       
     }
-/*
+    // TODO
+    // 
     else if ((result = StatementExpression(curr_tok)) == rSUCCESS) {
         
     }
@@ -696,9 +723,9 @@ static int StatementPrint(uint32_t curr_tok)
             vval = 0;
             
             switch (var_list[vloc].var_type) {
-              case INT8:
+              case VAR_INT8:
                 do {
-                  vval = stack[var_list[vloc].idx];
+                  vval = stack[var_list[vloc].addr];
                   CONSOLE_ADD_SIGNED_TOK((int8_t)vval);
                   if (i > 1) {
                     CONSOLE_ADD_STRING(", ");
@@ -706,9 +733,9 @@ static int StatementPrint(uint32_t curr_tok)
                   i--;
                 } while (i);
                 break;
-              case UINT8:
+              case VAR_UINT8:
                 do {
-                  vval = stack[var_list[vloc].idx];
+                  vval = stack[var_list[vloc].addr];
                   CONSOLE_ADD_UNSIGNED_TOK((uint8_t)vval);
                   if (i > 1) {
                     CONSOLE_ADD_STRING(", ");
@@ -716,10 +743,10 @@ static int StatementPrint(uint32_t curr_tok)
                   i--;
                 } while (i);
                 break;
-              case INT16:
+              case VAR_INT16:
                 do {
-                  vval = stack[var_list[vloc].idx];
-                  vval |= ((uint16_t)stack[var_list[vloc].idx + 1]) << 8;
+                  vval = stack[var_list[vloc].addr];
+                  vval |= ((uint16_t)stack[var_list[vloc].addr + 1]) << 8;
                   CONSOLE_ADD_SIGNED_TOK((int16_t)vval);
                   if (i > 2) {
                     CONSOLE_ADD_STRING(", ");
@@ -727,10 +754,10 @@ static int StatementPrint(uint32_t curr_tok)
                   i -= 2;
                 } while (i);
                 break;
-              case UINT16:
+              case VAR_UINT16:
                 do {
-                  vval = stack[var_list[vloc].idx];
-                  vval |= ((uint16_t)stack[var_list[vloc].idx + 1]) << 8;
+                  vval = stack[var_list[vloc].addr];
+                  vval |= ((uint16_t)stack[var_list[vloc].addr + 1]) << 8;
                   CONSOLE_ADD_UNSIGNED_TOK((uint16_t)vval);
                   if (i > 2) {
                     CONSOLE_ADD_STRING(", ");
@@ -738,12 +765,12 @@ static int StatementPrint(uint32_t curr_tok)
                   i -= 2;
                 } while (i);
                 break;
-              case INT32:
+              case VAR_INT32:
                 do {
-                  vval = stack[var_list[vloc].idx];
-                  vval |= ((uint32_t)stack[var_list[vloc].idx + 1]) << 8;
-                  vval |= ((uint32_t)stack[var_list[vloc].idx + 2]) << 16;
-                  vval |= ((uint32_t)stack[var_list[vloc].idx + 3]) << 24;
+                  vval = stack[var_list[vloc].addr];
+                  vval |= ((uint32_t)stack[var_list[vloc].addr + 1]) << 8;
+                  vval |= ((uint32_t)stack[var_list[vloc].addr + 2]) << 16;
+                  vval |= ((uint32_t)stack[var_list[vloc].addr + 3]) << 24;
                   CONSOLE_ADD_SIGNED_TOK((int32_t)vval);
                   if (i > 4) {
                     CONSOLE_ADD_STRING(", ");
@@ -751,12 +778,12 @@ static int StatementPrint(uint32_t curr_tok)
                   i -= 4;
                 } while (i);
                 break;
-              case UINT32:
+              case VAR_UINT32:
                 do {
-                  vval = stack[var_list[vloc].idx];
-                  vval |= ((uint32_t)stack[var_list[vloc].idx + 1]) << 8;
-                  vval |= ((uint32_t)stack[var_list[vloc].idx + 2]) << 16;
-                  vval |= ((uint32_t)stack[var_list[vloc].idx + 3]) << 24;
+                  vval = stack[var_list[vloc].addr];
+                  vval |= ((uint32_t)stack[var_list[vloc].addr + 1]) << 8;
+                  vval |= ((uint32_t)stack[var_list[vloc].addr + 2]) << 16;
+                  vval |= ((uint32_t)stack[var_list[vloc].addr + 3]) << 24;
                   CONSOLE_ADD_UNSIGNED_TOK((uint32_t)vval);
                   if (i > 4) {
                     CONSOLE_ADD_STRING(", ");
@@ -807,8 +834,8 @@ static int StatementVar(uint32_t curr_tok)
   // VAR              :== 'VAR' VAR_LIST VAR_TYPE
   // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
   // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
-  int var_type;
-  int temp, size_in_bytes, array_size;
+  int var_type, sub_var_type;
+  uint32_t temp, size_in_bytes;
   if (curr_tok < tokp) {
     // Check VAR_LIST
     if (VarIsList(&curr_tok) == rSUCCESS) {
@@ -819,23 +846,17 @@ static int StatementVar(uint32_t curr_tok)
         }
 
         // Once we have a valid statement, we must interpret it properly.
-        // TODO
-        switch (var_type) {
-          case INT8:
-          case UINT8:
-            size_in_bytes = 1;
-            break;
-          case INT16:
-          case UINT16:
-            size_in_bytes = 2;
-            break;
-          case INT32:
-          case UINT32:
-            size_in_bytes = 4;
-            break;
-          default:
-            size_in_bytes = 1;
-            break;
+        // Save the variable size and type
+        if (var_type < sizeof(var_type_sizes)) {
+          size_in_bytes = var_type_sizes[var_type];
+          if (var_type > (int)VAR_UINT32PTR) {
+            sub_var_type = var_type - NUM_DATA_TYPES;
+          } else {
+            sub_var_type = 0;
+          }
+        } else {
+          THROW_ERROR("Uknown error", 0);
+          return rFAILURE;
         }
 
         // Go through all the VARIABLE tokens and see if they
@@ -851,22 +872,29 @@ static int StatementVar(uint32_t curr_tok)
             }
 
             // Add it!
-            // 1. Save the name
+            // 1. Save the name and sub_var_type
             temp = tokens[curr_tok].idx2 - tokens[curr_tok].idx1;
             memcpy(var_list[varp].name, linebuf + tokens[curr_tok].idx1, temp);
+            var_list[varp].sub_var_type = sub_var_type;
             // 2. Add to the stack
             //  i) Save location on stack to idx
-            var_list[varp].idx = sp;
+            var_list[varp].addr = sp;
             //  ii) Update stack based on variable size
             if (curr_tok + 3 < tokp && tokens[curr_tok + 2].type == NUMBER) {
-              array_size = ParseTokToNumber(curr_tok + 2);
+              var_list[varp].len = ParseTokToNumber(curr_tok + 2);
+              if (var_list[varp].len > 1) {
+                var_list[varp].sub_var_type = var_type;
+                if (var_type <= (int)VAR_UINT32) {
+                  var_type += NUM_DATA_TYPES;
+                }
+              }
             } else {
-              array_size = 1;
+              var_list[varp].len = 1;
             }
-            sp += size_in_bytes * array_size;
+            sp += size_in_bytes * var_list[varp].len;
             // 3. Save the var_type and size_in_bytes
             var_list[varp].var_type = var_type;
-            var_list[varp].size_in_bytes = size_in_bytes * array_size;
+            var_list[varp].size_in_bytes = size_in_bytes;
             varp++;
           }
         }
@@ -886,11 +914,11 @@ static int StatementVar(uint32_t curr_tok)
 static int StatementAssignment(uint32_t curr_tok)
 {
   // ASSIGNMENT Syntax
-  // ASSIGNMENT :== { VARIABLE '=' } EXPRESSION
+  // ASSIGNMENT :== { VAR_DECLARATION '=' } EXPRESSION
+  // VAR_DECLARATION :== VARIABLE [ '[' NUMBER ']' ]
   if (curr_tok < tokp) {
     do {
-      if (tokens[curr_tok].type == VARIABLE) {
-        curr_tok++;
+      if (VarIsDeclaration(&curr_tok) == rSUCCESS) {
         if (curr_tok < tokp && tokens[curr_tok].type == EQUALS) {
           curr_tok++;
           if (curr_tok >= tokp) {
@@ -907,10 +935,12 @@ static int StatementAssignment(uint32_t curr_tok)
       }
     } while (tokens[curr_tok].type == VARIABLE);
   } else {
+    THROW_ERROR("Missing tokens", 0);
     return rFAILURE;
   }
 
   // Check EXPRESSION
+  DEBUG_PRINTF("curr_tok = %d\n", curr_tok);
   return rSUCCESS;
   return StatementExpression(curr_tok);
 }
@@ -919,10 +949,10 @@ static int StatementExpression(uint32_t curr_tok)
 {
   // EXPRESSION Syntax
   // EXPRESSION :== TERM | TERM { [+,-,&,|] TERM }
-  // TERM       :== FACTOR | FACTOR { [*,/] FACTOR }
-  // FACTOR     :== NUMBER | VARIABLE | '(' EXPRESSION ')'
+  // TERM      :== FACTOR | FACTOR { [*,/] FACTOR }
+  // FACTOR    :== NUMBER | [+,-] NUMBER | VARIABLE | [+,-] VARIABLE | '(' EXPRESSION ')'
   
-#if 1
+#if 0
   if (curr_tok < tokp) {
     // Check TERM(s)
     do {
@@ -948,6 +978,7 @@ static int StatementExpression(uint32_t curr_tok)
 
   int vloc;
   uint32_t vval;
+  int size, i;
   token_t tok1, tok2, tok3;
   tok1 = tokens[curr_tok];
   tok2 = tokens[curr_tok + 1];
@@ -967,24 +998,34 @@ static int StatementExpression(uint32_t curr_tok)
   }
 
   vval = ParseTokToNumber(curr_tok + 2);
+  size = var_type_sizes[var_list[vloc].var_type];
+  i = 0;
+  while (size--) {
+    stack[var_list[vloc].addr + i] = vval & 0xFF;
+    i++;
+    vval >> 8;
+  }
+
+/*
   switch (var_list[vloc].var_type) {
-    case INT8:
-    case UINT8:
-      stack[var_list[vloc].idx] = vval & 0xFF;
+    case VAR_INT8:
+    case VAR_UINT8:
+      stack[var_list[vloc].addr] = vval & 0xFF;
       break;
-    case INT16:
-    case UINT16:
-      stack[var_list[vloc].idx] = vval & 0xFF;
-      stack[var_list[vloc].idx + 1] = (vval >> 8) & 0xFF;
-    case INT32:
-    case UINT32:
-      stack[var_list[vloc].idx] = vval & 0xFF;
-      stack[var_list[vloc].idx + 1] = (vval >> 8) & 0xFF;
-      stack[var_list[vloc].idx + 2] = (vval >> 16) & 0xFF;
-      stack[var_list[vloc].idx + 3] = (vval >> 24) & 0xFF;
+    case VAR_INT16:
+    case VAR_UINT16:
+      stack[var_list[vloc].addr] = vval & 0xFF;
+      stack[var_list[vloc].addr + 1] = (vval >> 8) & 0xFF;
+    case VAR_INT32:
+    case VAR_UINT32:
+      stack[var_list[vloc].addr] = vval & 0xFF;
+      stack[var_list[vloc].addr + 1] = (vval >> 8) & 0xFF;
+      stack[var_list[vloc].addr + 2] = (vval >> 16) & 0xFF;
+      stack[var_list[vloc].addr + 3] = (vval >> 24) & 0xFF;
     default:
       break;
   }
+*/
 #endif
 
   return rSUCCESS;
@@ -1008,8 +1049,12 @@ static int StatementMempeek(uint32_t curr_tok)
   CONSOLE_PRINTF("Var List Size: %d\n", varp);
   for (i = 0; i < varp; i++) {
     CONSOLE_PRINTF("var_list[%d].name = %s\n", i, var_list[i].name);
+    CONSOLE_PRINTF("var_list[%d].addr = %u\n", i, var_list[i].addr);
     CONSOLE_PRINTF("var_list[%d].size = %u\n", i, var_list[i].size_in_bytes);
-    CONSOLE_PRINTF("var_list[%d].idx = %u\n", i, var_list[i].idx);
+    CONSOLE_PRINTF("var_list[%d].len = %u\n", i, var_list[i].len);
+    CONSOLE_PRINTF("var_list[%d].type = %u\n", i, var_list[i].var_type);
+    CONSOLE_PRINTF("var_list[%d].subtype = %u\n", i, var_list[i].sub_var_type);
+    CONSOLE_PRINTF("var_list[%d].val = %u\n", i, var_list[i].val);
   }
   return rSUCCESS;
 }
@@ -1074,13 +1119,47 @@ static int VarIsType(uint32_t *curr_tok, int *type)
   }
 
   switch ((var_type = ParseGetKeyword((*curr_tok)++))) {
+    case CHAR:
+      *type = (int)VAR_CHAR;
+      break;
     case INT8:
+      *type = (int)VAR_INT8;
+      break;
     case UINT8:
+      *type = (int)VAR_UINT8;
+      break;
     case INT16:
+      *type = (int)VAR_INT16;
+      break;
     case UINT16:
+      *type = (int)VAR_UINT16;
+      break;
     case INT32:
+      *type = (int)VAR_INT32;
+      break;
     case UINT32:
-      *type = var_type;
+      *type = (int)VAR_UINT32;
+      break;
+    case CHARPTR:
+      *type = (int)VAR_CHARPTR;
+      break;
+    case INT8PTR:
+      *type = (int)VAR_INT8PTR;
+      break;
+    case UINT8PTR:
+      *type = (int)VAR_UINT8PTR;
+      break;
+    case INT16PTR:
+      *type = (int)VAR_INT16PTR;
+      break;
+    case UINT16PTR:
+      *type = (int)VAR_UINT16PTR;
+      break;
+    case INT32PTR:
+      *type = (int)VAR_INT32PTR;
+      break;
+    case UINT32PTR:
+      *type = (int)VAR_UINT32PTR;
       break;
     default:
       return rFAILURE;
@@ -1123,7 +1202,18 @@ static int ExprIsTerm(uint32_t *curr_tok)
 
 static int ExprIsFactor(uint32_t *curr_tok)
 {
-  // FACTOR :== NUMBER | '(' EXPRESSION ')'
+  // FACTOR :== NUMBER | [+,-] NUMBER | VARIABLE | [+,-] VARIABLE | '(' EXPRESSION ')'
+  uint32_t ctok = *curr_tok;
+
+  if (tokens[ctok].type == NUMBER) {
+
+  } else if (tokens[ctok].type == PLUS) {
+
+  } else if (tokens[ctok].type == MINUS) {
+
+  } 
+
+  *curr_tok = ctok;
   return rSUCCESS;
 }
 
