@@ -976,16 +976,16 @@ static int StatementExpression(uint32_t curr_tok)
     return rFAILURE;
   }
 
-  int vloc;
-  uint32_t vval;
-  int size, i;
-  token_t tok1, tok2, tok3;
-  tok1 = tokens[curr_tok];
-  tok2 = tokens[curr_tok + 1];
-  tok3 = tokens[curr_tok + 2];
-  if (tok1.type != VARIABLE) {
+  if (VarIsDeclaration(&curr_tok) != rSUCCESS) {
     return rFAILURE;
   }
+
+  int vloc, offs = 0;
+  uint32_t vval;
+  int size, i;
+  token_t tok2, tok3;
+  tok2 = tokens[curr_tok];
+  tok3 = tokens[curr_tok + 1];
   if (tok2.type != EQUALS) {
     return rFAILURE;
   }
@@ -993,17 +993,33 @@ static int StatementExpression(uint32_t curr_tok)
     return rFAILURE;
   }
 
-  if ((vloc = VarLocation(curr_tok)) < 0) {
+  if ((vloc = VarLocation(0)) < 0) {
     return rFAILURE;
   }
 
-  vval = ParseTokToNumber(curr_tok + 2);
-  size = var_type_sizes[var_list[vloc].var_type];
-  i = 0;
-  while (size--) {
-    stack[var_list[vloc].addr + i] = vval & 0xFF;
-    i++;
-    vval >> 8;
+  vval = ParseTokToNumber(curr_tok + 1);
+  if (var_list[vloc].var_type <= VAR_UINT32) {
+    size = var_type_sizes[var_list[vloc].var_type];
+    i = 0;
+    while (size--) {
+      stack[var_list[vloc].addr + i] = vval & 0xFF;
+      i++;
+      vval >>= 8;
+    }
+  } else {
+    if (curr_tok > 1) {
+      offs = ParseTokToNumber(2);
+      if (var_list[vloc].sub_var_type <= VAR_UINT32) {
+        size = var_type_sizes[var_list[vloc].sub_var_type];
+        i = 0;
+        while (size--) {
+          stack[var_list[vloc].addr + offs + i] = vval & 0xFF;
+          i++; vval >>= 8;
+        }
+      }
+    } else {
+      var_list[vloc].addr = vval;
+    }
   }
 
 /*
@@ -1054,7 +1070,6 @@ static int StatementMempeek(uint32_t curr_tok)
     CONSOLE_PRINTF("var_list[%d].len = %u\n", i, var_list[i].len);
     CONSOLE_PRINTF("var_list[%d].type = %u\n", i, var_list[i].var_type);
     CONSOLE_PRINTF("var_list[%d].subtype = %u\n", i, var_list[i].sub_var_type);
-    CONSOLE_PRINTF("var_list[%d].val = %u\n", i, var_list[i].val);
   }
   return rSUCCESS;
 }
