@@ -44,10 +44,9 @@ char debug_buf[128];
     consolebuf_idx += sprintf(consolebuf + consolebuf_idx, "%d", (v)); \
   } while (0);
       
-#define CONSOLE_ADD_CHAR_TOK(t, v) \
+#define CONSOLE_ADD_CHAR_TOK(v) \
   do { \
-    sprintf(consolebuf + consolebuf_idx, "%c", (v)); \
-    consolebuf_idx += t.idx2 - t.idx1; \
+    consolebuf_idx += sprintf(consolebuf + consolebuf_idx, "%c", (v)); \
   } while (0);
       
 #define CONSOLE_PRINTBUF() \
@@ -84,19 +83,19 @@ const char *keywords[] = {
   "PRINT",
   "VAR",
   "CHAR",
-  "CHAR*",
   "INT8",
   "UINT8",
   "INT16",
   "UINT16",
   "INT32",
   "UINT32",
-  "INT8*",
-  "UINT8*",
-  "INT16*",
-  "UINT16*",
-  "INT32*",
-  "UINT32*",
+  "CHARPTR",
+  "INT8PTR",
+  "UINT8PTR",
+  "INT16PTR",
+  "UINT16PTR",
+  "INT32PTR",
+  "UINT32PTR",
   "IF",
   "THEN",
   "ELSE",
@@ -706,19 +705,79 @@ static int StatementPrint(uint32_t curr_tok)
   // PRINT Syntax
   // PRINT      :== 'PRINT' [PRINT_OBJ] { '+' PRINT_OBJ }*
   // PRINT_OBJ  :== STRING | VARIABLE
-  int i, vloc;
-  uint32_t vval;
+  int i, j, size, vloc, var_type;
+  uint32_t vval, ctok, offs;
   consolebuf_idx = 0;
   memset(consolebuf, 0, CONSOLEBUF_LEN);
 
   if (curr_tok < tokp) {
     while (curr_tok < tokp) {
-      if (tokens[curr_tok].type == STRING || 
-          tokens[curr_tok].type == VARIABLE) {
+      ctok = curr_tok;
+      if (tokens[curr_tok].type == STRING ||
+            (VarIsDeclaration(&ctok) == rSUCCESS)) {
         if (tokens[curr_tok].type == STRING) {
           CONSOLE_ADD_STRING_TOK(tokens[curr_tok]);
+          curr_tok++;
         } else {
           if ((vloc = VarLocation(curr_tok)) >= 0) {
+            if (var_list[vloc].var_type <= VAR_UINT32) {
+              size = var_type_sizes[var_list[vloc].var_type];
+              i = 0;
+              vval = 0;
+              while (size--) {
+                vval |= (stack[var_list[vloc].addr + i] & 0xFF) << (i << 3);
+                i++;
+              }
+              var_type = var_list[vloc].var_type;
+            } else {
+              if (ctok - curr_tok > 1) {
+                offs = ParseTokToNumber(curr_tok + 2);
+                if (var_list[vloc].sub_var_type <= VAR_UINT32) {
+                  size = var_type_sizes[var_list[vloc].sub_var_type];
+                  i = 0;
+                  j = size;
+                  vval = 0;
+                  while (j--) {
+                    vval |= (stack[var_list[vloc].addr +
+                            (offs * size) + i] & 0xFF) << (i << 3);
+                    i++;
+                  }
+                  var_type = var_list[vloc].sub_var_type;
+                } else {
+                  // TODO
+                  return rFAILURE;
+                }
+              } else {
+                vval = var_list[vloc].addr;
+                var_type = VAR_UINT16;
+              }
+            }
+
+            switch (var_type) {
+              case VAR_CHAR:
+                CONSOLE_ADD_CHAR_TOK((char)vval);
+                break;
+              case VAR_INT8:
+                CONSOLE_ADD_SIGNED_TOK((int8_t)vval);
+                break;
+              case VAR_UINT8:
+                CONSOLE_ADD_UNSIGNED_TOK((uint8_t)vval);
+                break;
+              case VAR_INT16:
+                CONSOLE_ADD_SIGNED_TOK((int16_t)vval);
+                break;
+              case VAR_UINT16:
+                CONSOLE_ADD_UNSIGNED_TOK((uint16_t)vval);
+                break;
+              case VAR_INT32:
+                CONSOLE_ADD_SIGNED_TOK((int16_t)vval);
+                break;
+              case VAR_UINT32:
+                CONSOLE_ADD_UNSIGNED_TOK((uint32_t)vval);
+                break;
+            }
+
+#if 0
             i = var_list[vloc].size_in_bytes;
             vval = 0;
             
@@ -794,12 +853,13 @@ static int StatementPrint(uint32_t curr_tok)
               default:
                 break;
             }
+#endif
           } else {
             THROW_ERROR("Undefined variable.", tokens[curr_tok].idx1 + 1);
             return rFAILURE;
           }
+          curr_tok = ctok;
         }
-        curr_tok++;
 
         if (curr_tok < tokp && (tokens[curr_tok].type == PLUS)) {
           if (curr_tok + 1 < tokp) {
@@ -842,6 +902,7 @@ static int StatementVar(uint32_t curr_tok)
       if (VarIsType(&curr_tok, &var_type) == rSUCCESS) {
         // Statement must end here.
         if (curr_tok < tokp) {
+          THROW_ERROR("Invalid syntax", tokens[curr_tok].idx1 + 1);
           return rFAILURE;
         }
 
@@ -982,7 +1043,7 @@ static int StatementExpression(uint32_t curr_tok)
 
   int vloc, offs = 0;
   uint32_t vval;
-  int size, i;
+  int size, i, j;
   token_t tok2, tok3;
   tok2 = tokens[curr_tok];
   tok3 = tokens[curr_tok + 1];
@@ -1012,8 +1073,9 @@ static int StatementExpression(uint32_t curr_tok)
       if (var_list[vloc].sub_var_type <= VAR_UINT32) {
         size = var_type_sizes[var_list[vloc].sub_var_type];
         i = 0;
-        while (size--) {
-          stack[var_list[vloc].addr + offs + i] = vval & 0xFF;
+        j = size;
+        while (j--) {
+          stack[var_list[vloc].addr + (offs * size) + i] = vval & 0xFF;
           i++; vval >>= 8;
         }
       }
@@ -1180,7 +1242,6 @@ static int VarIsType(uint32_t *curr_tok, int *type)
       return rFAILURE;
   }
 
-  (*curr_tok)++;
   return rSUCCESS;
 }
 
