@@ -910,10 +910,10 @@ static int StatementVar(uint32_t curr_tok)
         // Save the variable size and type
         if (var_type < sizeof(var_type_sizes)) {
           size_in_bytes = var_type_sizes[var_type];
-          if (var_type > (int)VAR_UINT32PTR) {
+          if (var_type > (int)VAR_UINT32) {
             sub_var_type = var_type - NUM_DATA_TYPES;
           } else {
-            sub_var_type = 0;
+            sub_var_type = -1;
           }
         } else {
           THROW_ERROR("Uknown error", 0);
@@ -943,6 +943,11 @@ static int StatementVar(uint32_t curr_tok)
             //  ii) Update stack based on variable size
             if (curr_tok + 3 < tokp && tokens[curr_tok + 2].type == NUMBER) {
               var_list[varp].len = ParseTokToNumber(curr_tok + 2);
+              if (var_list[varp].len == 0) {
+                THROW_ERROR("Array length must be non-zero",
+                            tokens[curr_tok + 2].idx1 + 1);
+                return rFAILURE;
+              }
               if (var_list[varp].len > 1) {
                 var_list[varp].sub_var_type = var_type;
                 if (var_type <= (int)VAR_UINT32) {
@@ -1131,7 +1136,7 @@ static int StatementMempeek(uint32_t curr_tok)
     CONSOLE_PRINTF("var_list[%d].size = %u\n", i, var_list[i].size_in_bytes);
     CONSOLE_PRINTF("var_list[%d].len = %u\n", i, var_list[i].len);
     CONSOLE_PRINTF("var_list[%d].type = %u\n", i, var_list[i].var_type);
-    CONSOLE_PRINTF("var_list[%d].subtype = %u\n", i, var_list[i].sub_var_type);
+    CONSOLE_PRINTF("var_list[%d].subtype = %d\n", i, var_list[i].sub_var_type);
   }
   return rSUCCESS;
 }
