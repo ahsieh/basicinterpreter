@@ -143,6 +143,7 @@ static int32_t ConvertHexNumber(int idx1, int idx2);
 static int32_t ConvertBinNumber(int idx1, int idx2);
 static int32_t ConvertDecNumber(int idx1, int idx2);
 static int32_t GetHexValue(char ch);
+static uint16_t GetPointerValue(int vloc);
 
 #if DEBUG >= 1
 static void debug_print_type(token_type_t type);
@@ -705,7 +706,7 @@ static int StatementPrint(uint32_t curr_tok)
   // PRINT Syntax
   // PRINT      :== 'PRINT' [PRINT_OBJ] { '+' PRINT_OBJ }*
   // PRINT_OBJ  :== STRING | VARIABLE
-  int i, j, size, vloc, var_type;
+  int i, j, size, vloc, var_type, addr;
   uint32_t vval, ctok, offs;
   consolebuf_idx = 0;
   memset(consolebuf, 0, CONSOLEBUF_LEN);
@@ -721,6 +722,7 @@ static int StatementPrint(uint32_t curr_tok)
         } else {
           if ((vloc = VarLocation(curr_tok)) >= 0) {
             if (var_list[vloc].var_type <= VAR_UINT32) {
+              // Data type (non-pointer)
               size = var_type_sizes[var_list[vloc].var_type];
               i = 0;
               vval = 0;
@@ -731,15 +733,17 @@ static int StatementPrint(uint32_t curr_tok)
               var_type = var_list[vloc].var_type;
             } else {
               if (ctok - curr_tok > 1) {
+                // Pointer Dereference
                 offs = ParseTokToNumber(curr_tok + 2);
                 if (var_list[vloc].sub_var_type <= VAR_UINT32) {
-                  size = var_type_sizes[var_list[vloc].sub_var_type];
+                  size = var_list[vloc].sub_size_in_bytes;
+                  addr = GetPointerValue(vloc);
                   i = 0;
                   j = size;
                   vval = 0;
                   while (j--) {
-                    vval |= (stack[var_list[vloc].addr +
-                            (offs * size) + i] & 0xFF) << (i << 3);
+                    vval |= (stack[addr + (offs * size) + i] & 0xFF)
+                              << (i << 3);
                     i++;
                   }
                   var_type = var_list[vloc].sub_var_type;
@@ -749,7 +753,10 @@ puts("TODO: PRINT Array of pointers");
                   return rFAILURE;
                 }
               } else {
+                // Pointer value
                 vval = var_list[vloc].addr;
+                vval = stack[var_list[vloc].addr] & 0xFF;
+                vval |= (stack[var_list[vloc].addr + 1] << 8) & 0xFF00;
                 var_type = VAR_UINT16;
               }
             }
@@ -1093,23 +1100,11 @@ static int StatementExpression(uint32_t curr_tok)
       // Dereference
       offs = ParseTokToNumber(2);
       if (var_list[vloc].sub_var_type <= VAR_UINT32) {
-        size = var_type_sizes[var_list[vloc].var_type];
-        i = 0;
-        addr = 0;
-        j = size;
-        while (j--) {
-          addr |= stack[var_list[vloc].addr + (offs * size) + i] << (i << 3);
-          i++;
-printf("addr: %d, offs: %d, size: %d, i: %d\n", addr, offs, size, i);
-        }
-
+        addr = GetPointerValue(vloc);
         size = var_type_sizes[var_list[vloc].sub_var_type];
         i = 0;
         j = size;
         while (j--) {
-          //stack[var_list[vloc].addr + (offs * size) + i] = vval & 0xFF;
-printf("addr: %d, offs: %d, size: %d, i: %d\n", addr, offs, size, i);
-printf("stack[%d]\n", addr + (offs * size) + i);
           stack[addr + (offs * size) + i] = vval & 0xFF;
           i++; vval >>= 8;
         }
@@ -1381,6 +1376,16 @@ static int32_t GetHexValue(char ch)
       return ch - 'a' + 10;
     }
   }
+}
+
+static uint16_t GetPointerValue(int vloc)
+{
+  uint16_t addr;
+
+  addr = stack[var_list[vloc].addr] & 0xFF;
+  addr += (stack[var_list[vloc].addr + 1] << 8) & 0xFF00;
+  
+  return addr;
 }
 
 #if DEBUG >= 1
