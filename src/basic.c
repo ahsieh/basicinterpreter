@@ -745,6 +745,7 @@ static int StatementPrint(uint32_t curr_tok)
                   var_type = var_list[vloc].sub_var_type;
                 } else {
                   // TODO
+puts("TODO: PRINT Array of pointers");
                   return rFAILURE;
                 }
               } else {
@@ -895,7 +896,7 @@ static int StatementVar(uint32_t curr_tok)
   // VAR_LIST         :== VAR_DECLARATION {, VAR_DECLARATION}*
   // VAR_DECLARATION  :== VARIABLE [ '[' NUMBER ']' ]
   int var_type, sub_var_type;
-  uint32_t temp, size_in_bytes;
+  uint16_t temp, size_in_bytes, sub_size_in_bytes;
   if (curr_tok < tokp) {
     // Check VAR_LIST
     if (VarIsList(&curr_tok) == rSUCCESS) {
@@ -912,8 +913,10 @@ static int StatementVar(uint32_t curr_tok)
           size_in_bytes = var_type_sizes[var_type];
           if (var_type > (int)VAR_UINT32) {
             sub_var_type = var_type - NUM_DATA_TYPES;
+            sub_size_in_bytes = var_type_sizes[sub_var_type];
           } else {
             sub_var_type = -1;
+            sub_size_in_bytes = 0;
           }
         } else {
           THROW_ERROR("Uknown error", 0);
@@ -936,7 +939,6 @@ static int StatementVar(uint32_t curr_tok)
             // 1. Save the name and sub_var_type
             temp = tokens[curr_tok].idx2 - tokens[curr_tok].idx1;
             memcpy(var_list[varp].name, linebuf + tokens[curr_tok].idx1, temp);
-            var_list[varp].sub_var_type = sub_var_type;
             // 2. Add to the stack
             //  i) Save location on stack to idx
             var_list[varp].addr = sp;
@@ -948,20 +950,34 @@ static int StatementVar(uint32_t curr_tok)
                             tokens[curr_tok + 2].idx1 + 1);
                 return rFAILURE;
               }
-              if (var_list[varp].len > 1) {
+
+              // Push pointer to stack and have it point to start of array data
+              if (var_type <= (int)VAR_UINT32) {
+                var_list[varp].var_type = var_type + NUM_DATA_TYPES;
                 var_list[varp].sub_var_type = var_type;
-                if (var_type <= (int)VAR_UINT32) {
-                  var_type += NUM_DATA_TYPES;
-                }
+              } else {
+                var_list[varp].var_type = var_type;
+                var_list[varp].sub_var_type = var_type;
               }
+              var_list[varp].size_in_bytes = SIZEOF_PTR;
+              var_list[varp].sub_size_in_bytes =
+                                      var_type_sizes[var_list[varp].sub_var_type];
+              sp += SIZEOF_PTR;
+              stack[sp - SIZEOF_PTR] = sp & 0xFF;
+              stack[sp + 1 - SIZEOF_PTR] = (sp >> 8) & 0xFF;
+
+              // Now push the array data
+              sp += var_list[varp].len * var_list[varp].sub_size_in_bytes;
+              varp++;
             } else {
               var_list[varp].len = 1;
+              sp += size_in_bytes;
+              var_list[varp].var_type = var_type;
+              var_list[varp].sub_var_type = sub_var_type;
+              var_list[varp].size_in_bytes = size_in_bytes;
+              var_list[varp].sub_size_in_bytes = sub_size_in_bytes;
+              varp++;
             }
-            sp += size_in_bytes * var_list[varp].len;
-            // 3. Save the var_type and size_in_bytes
-            var_list[varp].var_type = var_type;
-            var_list[varp].size_in_bytes = size_in_bytes;
-            varp++;
           }
         }
       } else {
@@ -1048,7 +1064,7 @@ static int StatementExpression(uint32_t curr_tok)
 
   int vloc, offs = 0;
   uint32_t vval;
-  int size, i, j;
+  int size, i, j, addr;
   token_t tok2, tok3;
   tok2 = tokens[curr_tok];
   tok3 = tokens[curr_tok + 1];
@@ -1074,18 +1090,39 @@ static int StatementExpression(uint32_t curr_tok)
     }
   } else {
     if (curr_tok > 1) {
+      // Dereference
       offs = ParseTokToNumber(2);
       if (var_list[vloc].sub_var_type <= VAR_UINT32) {
+        size = var_type_sizes[var_list[vloc].var_type];
+        i = 0;
+        addr = 0;
+        j = size;
+        while (j--) {
+          addr |= stack[var_list[vloc].addr + (offs * size) + i] << (i << 3);
+          i++;
+printf("addr: %d, offs: %d, size: %d, i: %d\n", addr, offs, size, i);
+        }
+
         size = var_type_sizes[var_list[vloc].sub_var_type];
         i = 0;
         j = size;
         while (j--) {
-          stack[var_list[vloc].addr + (offs * size) + i] = vval & 0xFF;
+          //stack[var_list[vloc].addr + (offs * size) + i] = vval & 0xFF;
+printf("addr: %d, offs: %d, size: %d, i: %d\n", addr, offs, size, i);
+printf("stack[%d]\n", addr + (offs * size) + i);
+          stack[addr + (offs * size) + i] = vval & 0xFF;
           i++; vval >>= 8;
         }
       }
     } else {
-      var_list[vloc].addr = vval;
+      // Pointer
+      size = var_type_sizes[var_list[vloc].var_type];
+      i = 0;
+      while (size--) {
+        stack[var_list[vloc].addr + i] = vval & 0xFF;
+        i++;
+        vval >>= 8;
+      }
     }
   }
 
@@ -1137,6 +1174,7 @@ static int StatementMempeek(uint32_t curr_tok)
     CONSOLE_PRINTF("var_list[%d].len = %u\n", i, var_list[i].len);
     CONSOLE_PRINTF("var_list[%d].type = %u\n", i, var_list[i].var_type);
     CONSOLE_PRINTF("var_list[%d].subtype = %d\n", i, var_list[i].sub_var_type);
+    CONSOLE_PRINTF("var_list[%d].sub_size = %d\n", i, var_list[i].sub_size_in_bytes);
   }
   return rSUCCESS;
 }

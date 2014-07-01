@@ -21,7 +21,7 @@
 #define CONSOLEBUF_LEN        LINEBUF_LEN
 
 // Sizes (in bytes) for Variable Types
-#define SIZEOF_PTR            4
+#define SIZEOF_PTR            2
 #define SIZEOF_CHAR           SIZEOF_UINT8
 #define SIZEOF_INT8           1
 #define SIZEOF_UINT8          1
@@ -114,6 +114,7 @@ typedef struct {
   uint16_t      len;
   int           var_type;
   int           sub_var_type;
+  uint16_t      sub_size_in_bytes;
 } var_t;
 
 // Token data structure
