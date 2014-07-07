@@ -18,7 +18,8 @@ int main(int argc, char *argv[])
 
   // Make sure we are using the executable correctly.
   if (argc == 1) {
-    while ((result = BasicCommandLine()) == rSUCCESS);
+    while ((result = BasicCommandLine()) == rSUCCESS) {
+    }
     if (result == rFAILURE) {
       PrintErrorMessage();
     }

@@ -20,6 +20,9 @@
 // Console definitions
 #define CONSOLEBUF_LEN        LINEBUF_LEN
 
+// Array sizes
+#define MAX_ARRAY_DIM         2
+
 // Sizes (in bytes) for Variable Types
 #define SIZEOF_PTR            2
 #define SIZEOF_CHAR           SIZEOF_UINT8
