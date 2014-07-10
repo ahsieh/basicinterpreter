@@ -423,7 +423,7 @@ int LexIsHexDigit(char c)
 int LexIsKeyword(int idx1, int idx2)
 {
   int i;
-  for (i = 0; keywords[i]; i++) {
+  for (i = 0; keywords[i][0]; i++) {
     if (memcmp(linebuf + idx1, keywords[i], idx2 - idx1) == 0) {
       return 1;
     }
