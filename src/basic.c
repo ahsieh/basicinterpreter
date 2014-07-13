@@ -62,7 +62,7 @@ static uint32_t tokp = 0;
 // Line and column trackers
 static uint32_t line_count = 0, col_count = 0;
 // Error message
-static char error_message[32];
+static char error_message[ERRORBUF_LEN];
 // Run-Time Stack and Stack Pointer
 static uint8_t stack[STACK_SIZE];
 static uint32_t sp = 0;
@@ -131,14 +131,14 @@ static int ParseTokToNumber(uint32_t token_idx);
 static int StatementPrint(uint32_t curr_tok);
 static int StatementVar(uint32_t curr_tok);
 static int StatementAssignment(uint32_t curr_tok);
-static int StatementExpression(uint32_t curr_tok);
+static int StatementExpression(uint32_t curr_tok, uint32_t *value);
 static int StatementMempeek(uint32_t curr_tok);
 static int VarIsList(uint32_t *curr_tok);
 static int VarIsDeclaration(uint32_t *curr_tok);
 static int VarIsType(uint32_t *curr_tok, int *type);
 static int VarLocation(uint32_t curr_tok);
-static int ExprIsTerm(uint32_t *curr_tok);
-static int ExprIsFactor(uint32_t *curr_tok);
+static int ExprIsTerm(uint32_t *curr_tok, uint32_t *value);
+static int ExprIsFactor(uint32_t *curr_tok, uint32_t *value);
 static int32_t ConvertHexNumber(int idx1, int idx2);
 static int32_t ConvertBinNumber(int idx1, int idx2);
 static int32_t ConvertDecNumber(int idx1, int idx2);
@@ -504,8 +504,9 @@ int ParseLine(void)
     }
   } else {
     // Other statements must be Assignment statements
-#if 1
-    result = StatementExpression(curr_tok);
+#if 0
+    uint32_t val;
+    result = StatementExpression(curr_tok, &val);
 #else
     if ((result = StatementAssignment(curr_tok)) == rSUCCESS) {
             
@@ -589,6 +590,15 @@ static int LexAnalyzeLine(void)
             break;
           case '=':
             tokens[tokp].type = EQUALS;
+            break;
+          case '*':
+            tokens[tokp].type = ASTERISK;
+            break;
+          case '/':
+            tokens[tokp].type = DIVIDE;
+            break;
+          case '%':
+            tokens[tokp].type = MOD;
             break;
           case ',':
             tokens[tokp].type = COMMA;
@@ -733,7 +743,7 @@ static int StatementPrint(uint32_t curr_tok)
                 // Pointer Dereference
                 offs = ParseTokToNumber(curr_tok + 2);
                 if (ctok - curr_tok > 4) {
-                  offs *= ParseTokToNumber(curr_tok + 5);
+                  offs *= var_list[vloc].cols;
                   offs += ParseTokToNumber(curr_tok + 5);
                 }
 
@@ -880,7 +890,10 @@ static int StatementVar(uint32_t curr_tok)
             if (curr_tok + 3 < tokp && tokens[curr_tok + 2].type == NUMBER) {
               var_list[varp].len = ParseTokToNumber(curr_tok + 2);
               if (curr_tok + 6 < tokp && tokens[curr_tok + 5].type == NUMBER) {
-                var_list[varp].len *= ParseTokToNumber(curr_tok + 5);
+                var_list[varp].cols = ParseTokToNumber(curr_tok + 5);
+                var_list[varp].len *= var_list[varp].cols;
+              } else {
+                var_list[varp].cols = 1;
               }
 
               if (var_list[varp].len == 0) {
@@ -933,6 +946,9 @@ static int StatementVar(uint32_t curr_tok)
 
 static int StatementAssignment(uint32_t curr_tok)
 {
+  int result;
+  uint32_t value, expr_tok;
+
   // ASSIGNMENT Syntax
   // ASSIGNMENT :== { VAR_DECLARATION '=' }* EXPRESSION
   // VAR_DECLARATION :== VARIABLE [ '[' NUMBER ']' ]
@@ -960,28 +976,55 @@ static int StatementAssignment(uint32_t curr_tok)
   }
 
   // Check EXPRESSION
-  DEBUG_PRINTF("curr_tok = %d\n", curr_tok);
-  return rSUCCESS;
-  return StatementExpression(curr_tok);
+  expr_tok = curr_tok;
+  DEBUG_PRINTF("expr_tok = %d\n", expr_tok);
+  result = StatementExpression(curr_tok, &value);
+
+  // Finish assignment once we've determined the
+  // value of the expression.
+  // TODO
+  return result;
 }
 
-static int StatementExpression(uint32_t curr_tok)
+static int StatementExpression(uint32_t curr_tok, uint32_t *value)
 {
   // EXPRESSION Syntax
   // EXPRESSION :== TERM | TERM { [+,-,&,|] TERM }
-  // TERM      :== FACTOR | FACTOR { [*,/] FACTOR }
+  // TERM      :== FACTOR | FACTOR { [*,/,%] FACTOR }
   // FACTOR    :== NUMBER | [+,-] NUMBER | VARIABLE | [+,-] VARIABLE | '(' EXPRESSION ')'
   
-#if 0
+#if 1
+  uint32_t term_value = 0;
+  int prev_type = -1;
+
   if (curr_tok < tokp) {
     // Check TERM(s)
     do {
-      if (ExprIsTerm(&curr_tok) == rSUCCESS) {
+      if (ExprIsTerm(&curr_tok, &term_value) == rSUCCESS) {
+        // Perform OPERATION if 
+        switch (prev_type) {
+          case PLUS:
+puts("+");
+            *value += term_value;
+            break;
+          case MINUS:
+puts("-");
+            *value -= term_value;
+            break;
+          default:
+            *value = term_value;
+            break;
+        }
+
+puts("hi");
         // Check [+,-] TERM
         if (curr_tok < tokp) {
+          // TODO refactor this if statement
           if (!(tokens[curr_tok].type == PLUS || tokens[curr_tok].type == MINUS)) {
             return rFAILURE;
           }
+          prev_type = tokens[curr_tok].type;
+          curr_tok++;
         }
       } else {
         return rFAILURE; 
@@ -990,6 +1033,7 @@ static int StatementExpression(uint32_t curr_tok)
   } else {
     return rFAILURE;
   }
+DEBUG_PRINTF("value: %d", *value);
 #else
   // HACK FOR TESTING
   if (curr_tok + 2 >= tokp) {
@@ -1235,15 +1279,34 @@ static int VarLocation(uint32_t curr_tok)
   return -1;
 }
 
-static int ExprIsTerm(uint32_t *curr_tok)
+static int ExprIsTerm(uint32_t *curr_tok, uint32_t *value)
 {
-  // TERM :== FACTOR | FACTOR { [*,/] FACTOR }
+DEBUG_PRINTF("ExprIsTerm");
+
+  uint32_t temp_val;
+  int prev_type = -1;
+
+  // TERM :== FACTOR | FACTOR { [*,/,%] FACTOR }
   if (*curr_tok < tokp) {
     do {
-      if (ExprIsFactor(curr_tok) == rSUCCESS) {
-        // Check [*,/] FACTOR
+      if (ExprIsFactor(curr_tok, &temp_val) == rSUCCESS) {
+        // Check [*,/,%] FACTOR
         if (*curr_tok < tokp) {
-          
+          if (tokens[*curr_tok].type == ASTERISK) {
+            *curr_tok++;
+            prev_type = ASTERISK;
+          } else if (tokens[*curr_tok].type == DIVIDE) {
+            *curr_tok++;
+            prev_type = DIVIDE;
+          } else if (tokens[*curr_tok].type == MOD) {
+            *curr_tok++;
+            prev_type = MOD;
+          } else {
+            *value = temp_val;
+            break;
+          }
+        } else {
+          *value = temp_val;
         }
       } else {
         return rFAILURE;
@@ -1253,18 +1316,38 @@ static int ExprIsTerm(uint32_t *curr_tok)
   return rSUCCESS;
 }
 
-static int ExprIsFactor(uint32_t *curr_tok)
+static int ExprIsFactor(uint32_t *curr_tok, uint32_t *value)
 {
+DEBUG_PRINTF("ExprIsFactor");
+
   // FACTOR :== NUMBER | [+,-] NUMBER | VARIABLE | [+,-] VARIABLE | '(' EXPRESSION ')'
   uint32_t ctok = *curr_tok;
+  int sign = 1;
 
-  if (tokens[ctok].type == NUMBER) {
-
-  } else if (tokens[ctok].type == PLUS) {
-
+  if (tokens[ctok].type == PLUS) {
+    // Do nothing?
+    
+    // Next token
+    ctok++;
   } else if (tokens[ctok].type == MINUS) {
-
+    sign = -1;
+    
+    // Next token
+    ctok++;
   } 
+
+  if (ctok < tokp) {
+    if (tokens[ctok].type == NUMBER) {
+      *value = sign * ParseTokToNumber(ctok);
+      ctok++;
+    } else {
+      THROW_ERROR("Expecting NUMBER, VARIABLE, or EXPRESSION", tokens[ctok].idx1 + 1);
+      return rFAILURE;
+    }
+  } else {
+    THROW_ERROR("Missing NUMBER, VARIABLE, or EXPRESSION", tokens[ctok - 1].idx2 + 1);
+    return rFAILURE;
+  }
 
   *curr_tok = ctok;
   return rSUCCESS;

@@ -19,6 +19,8 @@
 #define NUM_PARSE_TREE_NODES  128
 // Console definitions
 #define CONSOLEBUF_LEN        LINEBUF_LEN
+// Error message definitions
+#define ERRORBUF_LEN          64
 
 // Array sizes
 #define MAX_ARRAY_DIM         2
@@ -84,6 +86,9 @@ typedef enum {
   PLUS,
   MINUS,
   EQUALS,
+  ASTERISK,
+  DIVIDE,
+  MOD,
   COMMA,
   OPEN_SQUARE_BRACKET,
   CLOSED_SQUARE_BRACKET,
@@ -115,6 +120,7 @@ typedef struct {
   uint16_t      addr;
   uint16_t      size_in_bytes;
   uint16_t      len;
+  uint16_t      cols;
   int           var_type;
   int           sub_var_type;
   uint16_t      sub_size_in_bytes;
