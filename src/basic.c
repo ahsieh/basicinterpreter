@@ -1033,7 +1033,8 @@ puts("hi");
   } else {
     return rFAILURE;
   }
-DEBUG_PRINTF("value: %d", *value);
+
+DEBUG_PRINTF("final value: %d", *value);
 #else
   // HACK FOR TESTING
   if (curr_tok + 2 >= tokp) {
@@ -1290,29 +1291,43 @@ DEBUG_PRINTF("ExprIsTerm");
   if (*curr_tok < tokp) {
     do {
       if (ExprIsFactor(curr_tok, &temp_val) == rSUCCESS) {
+        switch (prev_type) {
+          case ASTERISK:
+            *value *= temp_val;
+            break;
+          case DIVIDE:
+            *value /= temp_val;
+            break;
+          case MOD:
+            *value %= temp_val;
+            break;
+          default:
+            *value = temp_val;
+            break;
+        }
+
         // Check [*,/,%] FACTOR
         if (*curr_tok < tokp) {
           if (tokens[*curr_tok].type == ASTERISK) {
-            *curr_tok++;
+            (*curr_tok)++;
             prev_type = ASTERISK;
           } else if (tokens[*curr_tok].type == DIVIDE) {
-            *curr_tok++;
+            (*curr_tok)++;
             prev_type = DIVIDE;
           } else if (tokens[*curr_tok].type == MOD) {
-            *curr_tok++;
+            (*curr_tok)++;
             prev_type = MOD;
           } else {
-            *value = temp_val;
             break;
           }
-        } else {
-          *value = temp_val;
         }
       } else {
         return rFAILURE;
       }
     } while (*curr_tok < tokp);
   }
+
+printf("term val: %d\n", *value);
   return rSUCCESS;
 }
 
@@ -1350,6 +1365,7 @@ DEBUG_PRINTF("ExprIsFactor");
   }
 
   *curr_tok = ctok;
+printf("factor val: %d\n", *value);
   return rSUCCESS;
 }
 
@@ -1431,6 +1447,15 @@ static void debug_print_type(token_type_t type)
       break;
     case EQUALS:
       printf("Equals");
+      break;
+    case ASTERISK:
+      printf("Asterisk");
+      break;
+    case DIVIDE:
+      printf("Divide");
+      break;
+    case MOD:
+      printf("Mod");
       break;
     case COMMA:
       printf("Comma");
