@@ -121,7 +121,7 @@ const int var_type_sizes[] = {
   SIZEOF_UINT32PTR
 };
 
-const char single_char_operators[] = "()[]=+-*/:&|!,";
+const char single_char_operators[] = "()[]=+-*/%:&|!,";
 const char double_char_operators[] = "==&&||";
 
 /* Private Function Prototypes ---------------------------------------------- */
@@ -131,7 +131,7 @@ static int ParseTokToNumber(uint32_t token_idx);
 static int StatementPrint(uint32_t curr_tok);
 static int StatementVar(uint32_t curr_tok);
 static int StatementAssignment(uint32_t curr_tok);
-static int StatementExpression(uint32_t curr_tok, uint32_t *value);
+static int StatementExpression(uint32_t *curr_tok, uint32_t *value);
 static int StatementMempeek(uint32_t curr_tok);
 static int VarIsList(uint32_t *curr_tok);
 static int VarIsDeclaration(uint32_t *curr_tok);
@@ -609,6 +609,12 @@ static int LexAnalyzeLine(void)
           case ']':
             tokens[tokp].type = CLOSED_SQUARE_BRACKET;
             break;
+          case '(':
+            tokens[tokp].type = OPEN_PARENS;
+            break;
+          case ')':
+            tokens[tokp].type = CLOSED_PARENS;
+            break;
           default:
             tokens[tokp].type = OPERATOR;
             break;
@@ -978,7 +984,7 @@ static int StatementAssignment(uint32_t curr_tok)
   // Check EXPRESSION
   expr_tok = curr_tok;
   DEBUG_PRINTF("expr_tok = %d\n", expr_tok);
-  result = StatementExpression(curr_tok, &value);
+  result = StatementExpression(&curr_tok, &value);
 
   // Finish assignment once we've determined the
   // value of the expression.
@@ -986,7 +992,7 @@ static int StatementAssignment(uint32_t curr_tok)
   return result;
 }
 
-static int StatementExpression(uint32_t curr_tok, uint32_t *value)
+static int StatementExpression(uint32_t *curr_tok, uint32_t *value)
 {
   // EXPRESSION Syntax
   // EXPRESSION :== TERM | TERM { [+,-,&,|] TERM }
@@ -997,10 +1003,10 @@ static int StatementExpression(uint32_t curr_tok, uint32_t *value)
   uint32_t term_value = 0;
   int prev_type = -1;
 
-  if (curr_tok < tokp) {
+  if (*curr_tok < tokp) {
     // Check TERM(s)
     do {
-      if (ExprIsTerm(&curr_tok, &term_value) == rSUCCESS) {
+      if (ExprIsTerm(curr_tok, &term_value) == rSUCCESS) {
         // Perform OPERATION if 
         switch (prev_type) {
           case PLUS:
@@ -1016,20 +1022,24 @@ puts("-");
             break;
         }
 
-puts("hi");
         // Check [+,-] TERM
-        if (curr_tok < tokp) {
+        if (*curr_tok < tokp) {
           // TODO refactor this if statement
-          if (!(tokens[curr_tok].type == PLUS || tokens[curr_tok].type == MINUS)) {
-            return rFAILURE;
+          int type = tokens[*curr_tok].type;
+          if (type == PLUS) {
+            prev_type = type;
+            (*curr_tok)++;
+          } else if (type == MINUS) {
+            prev_type = type;
+            (*curr_tok)++;
+          } else {
+            break;
           }
-          prev_type = tokens[curr_tok].type;
-          curr_tok++;
         }
       } else {
         return rFAILURE; 
       }
-    } while (curr_tok < tokp);
+    } while (*curr_tok < tokp);
   } else {
     return rFAILURE;
   }
@@ -1174,11 +1184,13 @@ static int VarIsList(uint32_t *curr_tok)
 
 static int VarIsDeclaration(uint32_t *curr_tok)
 {
+puts("VarIsDeclaraion");
   // VAR_DECLARATION :== VARIABLE, [ '[', NUMBER, ']' ], [ '[', NUMBER, ']' ]
   uint32_t ctok = *curr_tok;
   int dim = 0;
 
   if (tokens[ctok++].type == VARIABLE) {
+puts("uhh");
     while (dim < MAX_ARRAY_DIM) {
       if (ctok < tokp && tokens[ctok].type == OPEN_SQUARE_BRACKET) {
         ctok++;
@@ -1198,6 +1210,7 @@ static int VarIsDeclaration(uint32_t *curr_tok)
       }
     }
   } else {
+puts("bye");
     THROW_ERROR("Invalid VARIABLE token", tokens[*curr_tok].idx1 + 1);
     return rFAILURE;
   }
@@ -1282,7 +1295,7 @@ static int VarLocation(uint32_t curr_tok)
 
 static int ExprIsTerm(uint32_t *curr_tok, uint32_t *value)
 {
-DEBUG_PRINTF("ExprIsTerm");
+DEBUG_PRINTF("ExprIsTerm: curr_tok = %d", *curr_tok);
 
   uint32_t temp_val;
   int prev_type = -1;
@@ -1322,6 +1335,7 @@ DEBUG_PRINTF("ExprIsTerm");
           }
         }
       } else {
+        THROW_ERROR("Invalid factor??", tokens[*curr_tok].idx1);
         return rFAILURE;
       }
     } while (*curr_tok < tokp);
@@ -1333,10 +1347,10 @@ printf("term val: %d\n", *value);
 
 static int ExprIsFactor(uint32_t *curr_tok, uint32_t *value)
 {
-DEBUG_PRINTF("ExprIsFactor");
+DEBUG_PRINTF("ExprIsFactor: curr_tok = %d", *curr_tok);
 
   // FACTOR :== NUMBER | [+,-] NUMBER | VARIABLE | [+,-] VARIABLE | '(' EXPRESSION ')'
-  uint32_t ctok = *curr_tok;
+  uint32_t ctok = *curr_tok, temp;
   int sign = 1;
 
   if (tokens[ctok].type == PLUS) {
@@ -1352,9 +1366,27 @@ DEBUG_PRINTF("ExprIsFactor");
   } 
 
   if (ctok < tokp) {
-    if (tokens[ctok].type == NUMBER) {
+    int type = tokens[ctok].type;
+    if (type == NUMBER) {
       *value = sign * ParseTokToNumber(ctok);
       ctok++;
+/*
+    } else if (VarIsDeclaration(&temp) == rSUCCESS) {
+       
+      ctok = temp;
+*/
+    } else if (type == OPEN_PARENS) {
+      ctok++;
+      if (StatementExpression(&ctok, value) == rSUCCESS) {
+        if (tokens[ctok].type == CLOSED_PARENS) {
+          ctok++;
+        } else {
+          THROW_ERROR("Missing close parenthesis", tokens[ctok].idx1 + 1);
+          return rFAILURE;
+        }
+      } else {
+        return rFAILURE;
+      }
     } else {
       THROW_ERROR("Expecting NUMBER, VARIABLE, or EXPRESSION", tokens[ctok].idx1 + 1);
       return rFAILURE;
@@ -1465,6 +1497,12 @@ static void debug_print_type(token_type_t type)
       break;
     case CLOSED_SQUARE_BRACKET:
       printf("Closed Square Bracket");
+      break;
+    case OPEN_PARENS:
+      printf("Open Parenthesis");
+      break;
+    case CLOSED_PARENS:
+      printf("Closed Parenthesis");
       break;
     case IDENTIFIER:
       printf("Identifier");
