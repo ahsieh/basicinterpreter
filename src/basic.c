@@ -71,9 +71,10 @@ static uint32_t sp = 0;
 // Variables Tracker and Pointer
 static var_t var_list[MAX_VAR_COUNT];
 static uint32_t varp = 0;
-static uint32_t var_val = 0;
-// Parse tree
-static parser_node_t parse_tree[NUM_PARSE_TREE_NODES];
+// Parse tree (TODO do we need this?)
+//static parser_node_t parse_tree[NUM_PARSE_TREE_NODES];
+// Expression nesting
+static int expr_nest_level = 0;
 // Console output
 static int consolebuf_idx = 0;
 static char consolebuf[CONSOLEBUF_LEN];
@@ -983,7 +984,7 @@ static int StatementAssignment(uint32_t curr_tok)
 
   // Check EXPRESSION
   expr_tok = curr_tok;
-  DEBUG_PRINTF("expr_tok = %d\n", expr_tok);
+  expr_nest_level = 0;
   result = StatementExpression(&curr_tok, &value);
 
   // Finish assignment once we've determined the
@@ -999,10 +1000,18 @@ static int StatementExpression(uint32_t *curr_tok, uint32_t *value)
   // TERM      :== FACTOR | FACTOR { [*,/,%] FACTOR }
   // FACTOR    :== NUMBER | [+,-] NUMBER | VARIABLE | [+,-] VARIABLE | '(' EXPRESSION ')'
   
-#if 1
   uint32_t term_value = 0;
   int prev_type = -1;
 
+  // Check nesting level
+  expr_nest_level++;
+DEBUG_PRINTF("Expression Evaluation: level = %d", expr_nest_level);
+  if (expr_nest_level >= MAX_EXPR_NEST_DEPTH) {
+    THROW_ERROR("Too many nested expressions", tokens[*curr_tok].idx1 + 1);
+    return rFAILURE;
+  }
+
+  // 
   if (*curr_tok < tokp) {
     // Check TERM(s)
     do {
@@ -1010,11 +1019,9 @@ static int StatementExpression(uint32_t *curr_tok, uint32_t *value)
         // Perform OPERATION if 
         switch (prev_type) {
           case PLUS:
-puts("+");
             *value += term_value;
             break;
           case MINUS:
-puts("-");
             *value -= term_value;
             break;
           default:
@@ -1044,91 +1051,9 @@ puts("-");
     return rFAILURE;
   }
 
-DEBUG_PRINTF("final value: %d", *value);
-#else
-  // HACK FOR TESTING
-  if (curr_tok + 2 >= tokp) {
-    return rFAILURE;
-  }
-
-  if (VarIsDeclaration(&curr_tok) != rSUCCESS) {
-    return rFAILURE;
-  }
-
-  int vloc, offs = 0;
-  uint32_t vval;
-  int size, i, j, addr;
-  token_t tok2, tok3;
-  tok2 = tokens[curr_tok];
-  tok3 = tokens[curr_tok + 1];
-  if (tok2.type != EQUALS) {
-    return rFAILURE;
-  }
-  if (tok3.type != NUMBER) {
-    return rFAILURE;
-  }
-
-  if ((vloc = VarLocation(0)) < 0) {
-    return rFAILURE;
-  }
-
-  vval = ParseTokToNumber(curr_tok + 1);
-  if (var_list[vloc].var_type <= VAR_UINT32) {
-    size = var_type_sizes[var_list[vloc].var_type];
-    i = 0;
-    while (size--) {
-      stack[var_list[vloc].addr + i] = vval & 0xFF;
-      i++;
-      vval >>= 8;
-    }
-  } else {
-    if (curr_tok > 1) {
-      // Dereference
-      offs = ParseTokToNumber(2);
-      if (var_list[vloc].sub_var_type <= VAR_UINT32) {
-        addr = GetPointerValue(vloc);
-        size = var_type_sizes[var_list[vloc].sub_var_type];
-        i = 0;
-        j = size;
-        while (j--) {
-          stack[addr + (offs * size) + i] = vval & 0xFF;
-          i++; vval >>= 8;
-        }
-      }
-    } else {
-      // Pointer
-      size = var_type_sizes[var_list[vloc].var_type];
-      i = 0;
-      while (size--) {
-        stack[var_list[vloc].addr + i] = vval & 0xFF;
-        i++;
-        vval >>= 8;
-      }
-    }
-  }
-
-/*
-  switch (var_list[vloc].var_type) {
-    case VAR_INT8:
-    case VAR_UINT8:
-      stack[var_list[vloc].addr] = vval & 0xFF;
-      break;
-    case VAR_INT16:
-    case VAR_UINT16:
-      stack[var_list[vloc].addr] = vval & 0xFF;
-      stack[var_list[vloc].addr + 1] = (vval >> 8) & 0xFF;
-    case VAR_INT32:
-    case VAR_UINT32:
-      stack[var_list[vloc].addr] = vval & 0xFF;
-      stack[var_list[vloc].addr + 1] = (vval >> 8) & 0xFF;
-      stack[var_list[vloc].addr + 2] = (vval >> 16) & 0xFF;
-      stack[var_list[vloc].addr + 3] = (vval >> 24) & 0xFF;
-    default:
-      break;
-  }
-*/
-#endif
-
+  // 
+  expr_nest_level--;
+  DEBUG_PRINTF("final value: %d", *value);
   return rSUCCESS;
 }
 
@@ -1379,6 +1304,7 @@ DEBUG_PRINTF("ExprIsFactor: curr_tok = %d", *curr_tok);
       ctok++;
       if (StatementExpression(&ctok, value) == rSUCCESS) {
         if (tokens[ctok].type == CLOSED_PARENS) {
+          *value *= sign;
           ctok++;
         } else {
           THROW_ERROR("Missing close parenthesis", tokens[ctok].idx1 + 1);

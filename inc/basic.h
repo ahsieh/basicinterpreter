@@ -15,6 +15,8 @@
 #define LABEL_NAME_LEN        64
 // Tokens limitations
 #define MAX_TOK_COUNT         128 
+// Expression Nesting limitations
+#define MAX_EXPR_NEST_DEPTH   10
 // Parser limitations
 #define NUM_PARSE_TREE_NODES  128
 // Console definitions
