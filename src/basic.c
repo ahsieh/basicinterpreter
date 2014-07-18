@@ -510,8 +510,13 @@ int ParseLine(void)
     uint32_t val;
     result = StatementExpression(curr_tok, &val);
 #else
+    uint32_t value;
     if ((result = StatementAssignment(curr_tok)) == rSUCCESS) {
             
+    } else if ((result = StatementExpression(&curr_tok, &value)) == rSUCCESS) {
+      // Uhhh... Sure. But this doesn't actually do anything :)
+      puts("Pointless epxression, my friend:)");
+      printf("Ans: %d (0x%x)\n", value, value);
     }
 #endif
   }
