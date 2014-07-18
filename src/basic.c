@@ -122,7 +122,7 @@ const int var_type_sizes[] = {
   SIZEOF_UINT32PTR
 };
 
-const char single_char_operators[] = "()[]=+-*/%:&|!,";
+const char single_char_operators[] = "()[]=+-*/%:&|!~,";
 const char double_char_operators[] = "==&&||";
 
 /* Private Function Prototypes ---------------------------------------------- */
@@ -138,6 +138,7 @@ static int VarIsList(uint32_t *curr_tok);
 static int VarIsDeclaration(uint32_t *curr_tok);
 static int VarIsType(uint32_t *curr_tok, int *type);
 static int VarLocation(uint32_t curr_tok);
+static int VarGetValue(uint32_t curr_tok, uint32_t vloc);
 static int ExprIsTerm(uint32_t *curr_tok, uint32_t *value);
 static int ExprIsFactor(uint32_t *curr_tok, uint32_t *value);
 static int32_t ConvertHexNumber(int idx1, int idx2);
@@ -616,6 +617,12 @@ static int LexAnalyzeLine(void)
           case ')':
             tokens[tokp].type = CLOSED_PARENS;
             break;
+          case '!':
+            tokens[tokp].type = EXCLAIMATION;
+            break;
+          case '~':
+            tokens[tokp].type = TILDA;
+            break;
           default:
             tokens[tokp].type = OPERATOR;
             break;
@@ -1053,7 +1060,7 @@ DEBUG_PRINTF("Expression Evaluation: level = %d", expr_nest_level);
 
   // 
   expr_nest_level--;
-  DEBUG_PRINTF("final value: %d", *value);
+  DEBUG_PRINTF("final value: %d, 0x%x", *value, *value);
   return rSUCCESS;
 }
 
@@ -1115,7 +1122,6 @@ puts("VarIsDeclaraion");
   int dim = 0;
 
   if (tokens[ctok++].type == VARIABLE) {
-puts("uhh");
     while (dim < MAX_ARRAY_DIM) {
       if (ctok < tokp && tokens[ctok].type == OPEN_SQUARE_BRACKET) {
         ctok++;
@@ -1135,7 +1141,6 @@ puts("uhh");
       }
     }
   } else {
-puts("bye");
     THROW_ERROR("Invalid VARIABLE token", tokens[*curr_tok].idx1 + 1);
     return rFAILURE;
   }
@@ -1218,6 +1223,25 @@ static int VarLocation(uint32_t curr_tok)
   return -1;
 }
 
+static int VarGetValue(uint32_t curr_tok, uint32_t vloc)
+{
+  int i, vval, size;
+  if (var_list[vloc].var_type <= VAR_UINT32) {
+    // Data type (non-pointer)
+    size = var_type_sizes[var_list[vloc].var_type];
+    i = 0;
+    vval = 0;
+    while (size--) {
+      vval |= (stack[var_list[vloc].addr + i] & 0xFF) << (i << 3);
+      i++;
+    }
+  } else {
+    vval = 0;
+  }
+
+  return vval;
+}
+
 static int ExprIsTerm(uint32_t *curr_tok, uint32_t *value)
 {
 DEBUG_PRINTF("ExprIsTerm: curr_tok = %d", *curr_tok);
@@ -1260,7 +1284,7 @@ DEBUG_PRINTF("ExprIsTerm: curr_tok = %d", *curr_tok);
           }
         }
       } else {
-        THROW_ERROR("Invalid factor??", tokens[*curr_tok].idx1);
+        //THROW_ERROR("Invalid factor??", tokens[*curr_tok].idx1);
         return rFAILURE;
       }
     } while (*curr_tok < tokp);
@@ -1276,35 +1300,39 @@ DEBUG_PRINTF("ExprIsFactor: curr_tok = %d", *curr_tok);
 
   // FACTOR :== NUMBER | [+,-] NUMBER | VARIABLE | [+,-] VARIABLE | '(' EXPRESSION ')'
   uint32_t ctok = *curr_tok, temp;
-  int sign = 1;
+  int op_type = OPERATOR;
 
-  if (tokens[ctok].type == PLUS) {
-    // Do nothing?
-    
-    // Next token
-    ctok++;
-  } else if (tokens[ctok].type == MINUS) {
-    sign = -1;
-    
-    // Next token
-    ctok++;
-  } 
+  switch (tokens[ctok].type) {
+    case PLUS:
+    case MINUS:
+    case EXCLAIMATION:
+    case TILDA:
+      op_type = tokens[ctok].type;
+      ctok++;
+      break;
+    default:
+      break;
+  }
 
   if (ctok < tokp) {
     int type = tokens[ctok].type;
+    temp = ctok;
     if (type == NUMBER) {
-      *value = sign * ParseTokToNumber(ctok);
+      *value = ParseTokToNumber(ctok);
       ctok++;
-/*
     } else if (VarIsDeclaration(&temp) == rSUCCESS) {
-       
-      ctok = temp;
-*/
+      int var_loc;
+      if ((var_loc = VarLocation(ctok)) >= 0) {
+        *value = VarGetValue(ctok, var_loc);
+        ctok = temp;
+      } else {
+        THROW_ERROR("Undefined variable", tokens[ctok].idx1 + 1);
+        return rFAILURE;
+      }
     } else if (type == OPEN_PARENS) {
       ctok++;
       if (StatementExpression(&ctok, value) == rSUCCESS) {
         if (tokens[ctok].type == CLOSED_PARENS) {
-          *value *= sign;
           ctok++;
         } else {
           THROW_ERROR("Missing close parenthesis", tokens[ctok].idx1 + 1);
@@ -1320,6 +1348,20 @@ DEBUG_PRINTF("ExprIsFactor: curr_tok = %d", *curr_tok);
   } else {
     THROW_ERROR("Missing NUMBER, VARIABLE, or EXPRESSION", tokens[ctok - 1].idx2 + 1);
     return rFAILURE;
+  }
+
+  switch (op_type) {
+    case MINUS:
+      *value = -(*value);
+      break;
+    case EXCLAIMATION:
+      *value = !(*value);
+      break;
+    case TILDA:
+      *value = ~(*value);
+      break;
+    default:
+      break;
   }
 
   *curr_tok = ctok;

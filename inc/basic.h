@@ -96,6 +96,8 @@ typedef enum {
   CLOSED_SQUARE_BRACKET,
   OPEN_PARENS,
   CLOSED_PARENS,
+  EXCLAIMATION,
+  TILDA,
   IDENTIFIER,
   VARIABLE,
   LABEL,
@@ -132,9 +134,9 @@ typedef struct {
 
 // Token data structure
 typedef struct {
-  int           idx1;
-  int           idx2;
-  token_type_t  type;
+  int           idx1; // Start index (inclusive)
+  int           idx2; // End index (exclusive)
+  token_type_t  type; // Type of token (see token_type_t)
 } token_t;
 
 // Parser Tree Node
